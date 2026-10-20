@@ -1,0 +1,27 @@
+# Binarios y artefactos de compilación
+/glauk
+/glauk.exe
+*.exe
+/bin/
+/dist/
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Temporales
+*.log
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+
+# Cobertura y perfiles
+coverage.out
+*.test
+*.prof
+
+# Editores
+.idea/
+.vscode/
