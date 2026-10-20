@@ -731,7 +731,76 @@ Límites: archivos de producción entre 30 y 180 líneas; tests ≤220 líneas. 
 
 ## 9. Dominio Reportes
 
-### 9.1 Cliente unificado de Evolution (`platform/evolution`)
+> Fase 9 implementada. `internal/reportes` es un dominio hexagonal puro: no conoce PostgreSQL, HTTP, Fiber, Evolution, perfiles, comprobantes ni tasas.
+
+### 9.1 Arquitectura hexagonal
+
+El paquete raíz `internal/reportes/` solo importa biblioteca estándar permitida: `context`, `time`, `errors`, `strings`, `regexp`, `fmt`, `encoding/base64`, `bytes`, `image`, `image/jpeg`, `crypto/sha256` y `sync`. Las dependencias externas se declaran como puertos y se satisfacen en adaptadores cableados desde `cmd/server`.
+
+| Archivo | Responsabilidad |
+|---|---|
+| `ports.go` | Puertos `SociosProvider`, `MovimientosProvider`, `WhatsAppSender` y DTOs puros. |
+| `models.go` | Casos de uso `SolicitudImagen`, `SolicitudTexto` y `Resultado`. |
+| `errors.go` | Errores centinela del dominio. |
+| `config.go` | Límites de imagen y TTL de idempotencia. |
+| `service.go` | Orquestación de filtros, envío de imagen y envío de texto. |
+| `target.go` | Resolución de destino, validación y enmascarado de JID. |
+| `image.go` | Limpieza de data URL, validación JPEG y sanitización de nombre. |
+| `idempotency.go` | Reserva de claves en memoria con TTL y límite de entradas. |
+| `ratelimit.go` | Token bucket por IP. |
+| `module.go` | Anclaje del servicio y del estado de proceso. |
+
+### 9.2 Puertos y casos de uso
+
+- `SociosProvider.SocioPorNombre` / `Socios`: única vía para consultar el directorio.
+- `MovimientosProvider.Filtros` / `Movimientos` / `Resumen`: filas y agregados ya proyectados, sin columnas internas.
+- `WhatsAppSender.EnviarImagen` / `EnviarTexto`: única salida hacia mensajería.
+
+`Service.Filtros` delega en `MovimientosProvider`. `Service.EnviarImagen` resuelve el destino, valida el JPEG, recorta el caption a 1024 caracteres, sanitiza `fileName` y envía `image/jpeg`. `Service.EnviarTexto` recorta a 4096 caracteres. Cualquier fallo del sender se envuelve con `ErrEnvioFallido`, conservando la causa con `errors.Join`.
+
+### 9.3 Flujo de validación JPEG
+
+1. El navegador rasteriza el reporte en un canvas de 1080×1350 y envía el JPEG en base64. El backend nunca recibe HTML ni ejecuta Chromium/Puppeteer.
+2. `LimpiarDataURL` acepta base64 puro o `data:image/jpeg;base64,...`; un MIME distinto o un data URL sin `;base64` devuelve `ErrImagenFormato`.
+3. Se decodifica base64 y se normaliza a `StdEncoding` sin re-encodear el JPEG.
+4. Se aplica `ImageMaxBytes` (10 MiB por defecto) antes de decodificar dimensiones.
+5. Se exige la firma binaria `FF D8 FF` y `format == "jpeg"`; PNG, WebP, SVG, texto y polyglots se rechazan con `ErrImagenFormato`.
+6. `image.DecodeConfig` lee solo la cabecera: mínimo 200 px por lado, máximo 4096 px por lado y máximo 16 000 000 de píxeles. Los incumplimientos devuelven `ErrImagenDimensiones`.
+7. El nombre se limpia de rutas y caracteres de control y se limita a 120 runas. El base64 validado es el que se envía a Evolution.
+
+### 9.4 Reglas de JID
+
+Regex normativa:
+
+```text
+^(?:[0-9]{5,25}|[0-9]{5,25}-[0-9]{5,25})@(g\.us|s\.whatsapp\.net|lid)$
+```
+
+- `remoteJid` válido tiene prioridad absoluta sobre `socio`; si viene presente, no se consulta el directorio.
+- Sin `socio` ni `remoteJid`: `ErrDestinoRequerido`.
+- Socio inexistente: `ErrSocioNoEncontrado`.
+- `id_grupo` vacío o placeholder terminado en `_JID`: `ErrJIDNoDisponible`.
+- JID con formato corrupto (`NOMBRE_JID`, `+549...`, `foo@g.us`, espacios o símbolos): `ErrJIDInvalido`.
+- `@c.us` se normaliza a `@s.whatsapp.net`; mayúsculas y el prefijo `whatsapp:` se toleran.
+- Los errores usan `maskJID` y nunca exponen el JID completo.
+
+### 9.5 Idempotencia y rate limiting
+
+`IdempotencyStore` usa `sync.Mutex`, TTL de 10 minutos por defecto y un máximo de 1000 entradas. La clave es `Idempotency-Key` si cumple `^[A-Za-z0-9_-]{8,64}$`; si no, `sha256(destino + "\x00" + caption + "\x00" + base64)`. `Begin` reserva la clave antes del envío, `Commit` guarda el `Resultado` y `Abort` libera el fallo. Una clave en curso responde `ErrEnvioEnCurso`; el almacén lleno responde `ErrIdempotenciaLlena`.
+
+`RateLimiter` aplica un token bucket por IP de 60/minuto con ráfaga 10. El handler traduce el rechazo a `429 RATE_LIMITED` con `Retry-After`; `GET /filtros` no se limita.
+
+### 9.6 Verificación del dominio
+
+```powershell
+$env:CGO_ENABLED = "1"
+go test ./internal/reportes -race -v -count=1
+go list -deps ./internal/reportes
+```
+
+`architecture_test.go` parsea los archivos de producción con `go/parser` y `go/ast` y falla si aparece un import fuera de la lista cerrada. Los tests cubren `remoteJid` sobre `socio`, `@c.us`, `@g.us`, `@lid`, placeholders, JPEG válido, PNG/SVG/WebP, exceso de bytes, dimensiones, ausencia de base64, texto vacío y fallo del sender.
+
+### 9.7 Cliente unificado de Evolution (`platform/evolution`)
 
 > Fase 4 implementada. Este paquete es el único adaptador de salida hacia Evolution API. No conoce JIDs, PostgreSQL ni reglas de dominio: recibe un `number` opaco y un payload ya validado por el dominio.
 
@@ -756,7 +825,7 @@ Recibo:
 - `Receipt.Raw` conserva una copia del cuerpo recibido, con la clave redactada si apareciera.
 - Un `200` con cuerpo vacío, `null` o no JSON no es error: devuelve `Status: "SENT"` y `MessageID` vacío.
 
-### 9.2 Reintentos y errores
+### 9.8 Reintentos y errores
 
 | Condición | ¿Reintenta? | Espera |
 |---|---|---|
@@ -776,7 +845,7 @@ Recibo:
 - `APIError` expone `StatusCode`, `Body`, `Retryable` y `RetryAfter` (segundos). `Body` se recorta a 500 caracteres e incluye `...` cuando se truncó.
 - La `apikey` se elimina del cuerpo antes de construir `APIError`; nunca aparece en `err.Error()` ni en logs. El paquete no registra credenciales.
 
-### 9.3 Simulación
+### 9.9 Simulación
 
 La simulación se activa **únicamente** cuando `EVOLUTION_API_URL` queda vacía (`Client.Simulated() == true`). En ese modo no se abre ninguna conexión y la API key no se utiliza.
 
@@ -785,7 +854,7 @@ La simulación se activa **únicamente** cuando `EVOLUTION_API_URL` queda vacía
 - El identificador es determinista para el mismo `kind`, `number` y contenido, lo que permite probar idempotencia y reintentos sin red.
 - En producción el arranque rechaza `EVOLUTION_API_URL` vacía; la simulación nunca puede activarse por accidente en ese entorno.
 
-### 9.4 Verificación
+### 9.10 Verificación del cliente Evolution
 
 ```powershell
 $env:CGO_ENABLED = "1"   # -race requiere cgo y gcc en PATH
@@ -802,7 +871,7 @@ Casos cubiertos:
 - Simulación sin red, determinista y con validación de campos mínimos.
 - La API key no aparece en el error aunque el servidor la refleje en el cuerpo.
 
-Los detalles de generación de carteleras, JPG, idempotencia de reportes y endpoints de dominio se completan en las fases de Reportes.
+El frontend de construcción de reportes y la superficie HTTP del dominio se completan en las fases siguientes.
 
 ## 10. Frontends y routing estático
 
