@@ -2,57 +2,44 @@ package store
 
 import (
 	"context"
-	"fmt"
-	"strings"
+
+	perfilrepo "glauk/internal/perfiles/repo"
 )
 
-// asignacion es una columna que el panel puede escribir y el valor que le toca.
-// `coalesce` distingue el interruptor, donde un nulo significa "no lo toques".
-type asignacion struct {
-	columna  string
-	valor    any
-	coalesce bool
-}
-
-// sentenciaDeGuardado arma el UPDATE con las columnas que la tabla tiene de verdad.
+// UpdateSocio guarda la configuración de un socio y devuelve cómo quedó.
 //
-// ¿Por qué no una sentencia literal? Porque el esquema heredado no es el que
-// suponíamos: `activo` no existe en perfiles_glaukov y nombrarla hace fallar el
-// guardado con 42703, el mismo error que tumbó la lectura. Preguntándole a la tabla
-// qué columnas tiene, el guardado escribe las que existen y calla las que no.
-func sentenciaDeGuardado(ctx context.Context, q Querier, cambios SocioUpdate, nombre string) (string, []any, error) {
+// El SQL no se construye en Tasas: se delega en internal/perfiles/repo, que es el
+// único escritor autorizado de perfiles_glaukov (D-12). Tasas conserva su API y su
+// forma de respuesta; solo aporta el JSON de monedas ya codificado y las columnas
+// opcionales que descubrió con introspección.
+//
+// Si el nombre no existe devuelve ErrNotFound. El servicio original respondía éxito
+// con un socio vacío en ese caso, y el panel mostraba "guardado" sin haber guardado
+// nada: silenciar ese desacuerdo es peor que devolver el error.
+func UpdateSocio(ctx context.Context, q Querier, nombre string, cambios SocioUpdate) (Socio, error) {
 	monedas, err := encodeJSON(cambios.Monedas)
 	if err != nil {
-		return "", nil, err
+		return Socio{}, err
 	}
 	existentes, err := columnasDe(ctx, q, tablaSocios)
 	if err != nil {
-		return "", nil, err
+		return Socio{}, err
 	}
-
-	candidatas := []asignacion{
-		{columna: "monedas", valor: monedas},
-		{columna: "activo", valor: cambios.Activo, coalesce: true},
-		{columna: "modo_prueba", valor: cambios.ModoPrueba, coalesce: true},
-		{columna: "rol", valor: cambios.Rol, coalesce: true},
+	rows, err := perfilrepo.ActualizarSocioTasas(ctx, q, existentes, perfilrepo.ActualizacionSocioTasas{
+		Monedas:    monedas,
+		Activo:     cambios.Activo,
+		ModoPrueba: cambios.ModoPrueba,
+		Rol:        cambios.Rol,
+	}, nombre)
+	if err != nil {
+		return Socio{}, err
 	}
-	partes := make([]string, 0, len(candidatas))
-	args := make([]any, 0, len(candidatas)+1)
-	for _, candidata := range candidatas {
-		if !existentes[candidata.columna] {
-			continue
+	defer rows.Close()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return Socio{}, err
 		}
-		args = append(args, candidata.valor)
-		if candidata.coalesce {
-			partes = append(partes, fmt.Sprintf("%s = COALESCE($%d, %s)", candidata.columna, len(args), candidata.columna))
-			continue
-		}
-		partes = append(partes, fmt.Sprintf("%s = $%d", candidata.columna, len(args)))
+		return Socio{}, ErrNotFound
 	}
-	if len(partes) == 0 {
-		return "", nil, fmt.Errorf("la tabla %s no tiene ninguna columna que el panel escriba", tablaSocios)
-	}
-	args = append(args, nombre)
-	sentencia := fmt.Sprintf("UPDATE %s SET %s WHERE LOWER(nombre) = LOWER($%d) RETURNING *", tablaSocios, strings.Join(partes, ", "), len(args))
-	return sentencia, args, nil
+	return scanSocio(rows)
 }

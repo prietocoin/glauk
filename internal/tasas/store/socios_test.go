@@ -7,6 +7,7 @@ import (
 
 	"github.com/pashagolub/pgxmock/v4"
 
+	perfilrepo "glauk/internal/perfiles/repo"
 	"glauk/internal/tasas/domain"
 )
 
@@ -85,8 +86,14 @@ func TestUpdateSocioEscribeSoloLasColumnasQueExisten(t *testing.T) {
 	mock := newMock(t)
 	mock.ExpectQuery(`SELECT * FROM perfiles_glaukov LIMIT 0`).WillReturnRows(pgxmock.NewRows(columnasHeredadas))
 	config := []byte(`{"COP":{"activo":true,"porcentaje":{"deposito":-2,"pago":3}}}`)
-	mock.ExpectQuery(`UPDATE perfiles_glaukov SET monedas = $1, modo_prueba = COALESCE($2, modo_prueba), rol = COALESCE($3, rol) WHERE LOWER(nombre) = LOWER($4) RETURNING *`).
-		WithArgs(config, (*bool)(nil), (*string)(nil), "Ana").
+	sentencia, args, err := perfilrepo.SentenciaSocioTasas(
+		map[string]bool{"monedas": true, "modo_prueba": true, "rol": true},
+		perfilrepo.ActualizacionSocioTasas{Monedas: config}, "Ana",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock.ExpectQuery(sentencia).WithArgs(args...).
 		WillReturnRows(pgxmock.NewRows(columnasHeredadas).AddRow("Ana", nil, nil, config, nil, ptr("ADMIN")))
 
 	socio, err := UpdateSocio(context.Background(), mock, "Ana", SocioUpdate{

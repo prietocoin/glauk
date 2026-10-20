@@ -1,10 +1,6 @@
 package store
 
-import (
-	"context"
-
-	"glauk/internal/tasas/domain"
-)
+import "glauk/internal/tasas/domain"
 
 // Socio es un perfil tal como vive en perfiles_glaukov, más los interruptores
 // operativos que no participan del cálculo.
@@ -44,21 +40,4 @@ type SocioUpdate struct {
 	Activo     *bool
 	ModoPrueba *bool
 	Rol        *string
-}
-
-// UpdateSocio guarda la configuración de un socio y devuelve cómo quedó.
-//
-// La sentencia no se escribe aquí: se arma con las columnas que la tabla tiene de
-// verdad (ver sentenciaDeGuardado), porque escribir a mano `activo = $2` fue lo que
-// rompió la lectura en producción y el guardado tenía la misma trampa esperando.
-//
-// Si el nombre no existe devuelve ErrNotFound. El servicio original respondía éxito
-// con un socio vacío en ese caso, y el panel mostraba "guardado" sin haber guardado
-// nada: silenciar ese desacuerdo es peor que devolver el error.
-func UpdateSocio(ctx context.Context, q Querier, nombre string, cambios SocioUpdate) (Socio, error) {
-	sentencia, args, err := sentenciaDeGuardado(ctx, q, cambios, nombre)
-	if err != nil {
-		return Socio{}, err
-	}
-	return queryOne(ctx, q, sentencia, args, scanSocio)
 }

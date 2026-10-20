@@ -449,7 +449,132 @@ go test ./internal/tasas/calculator -run TestGolden -v
 
 ## 7. Dominio Perfiles
 
-Modelo, codec superset de `monedas`, actividad H-02, endpoints, plantilla, compatibilidad y migración.
+> Fase 7 implementada. `internal/perfiles` es el **único escritor** de `perfiles_glaukov` (D-12). Tasas, Comprobantes y Reportes pueden leer la tabla a través de sus propios puertos, pero no ejecutan `INSERT`, `UPDATE` ni `DELETE` sobre ella.
+
+### 7.1 Mapa de archivos
+
+| Capa | Archivos | Responsabilidad |
+|---|---|---|
+| Modelo | `model/perfil.go`, `model/mostrar.go`, `model/monedas.go`, `model/conflictos.go`, `model/requests.go`, `model/aliases.go` | Contrato JSON, codec tolerante, defaults y alias. |
+| Servicio | `service/service.go`, `service/params.go`, `service/actividad.go`, `service/plantilla.go`, `service/compat.go`, `service/errors.go`, `service/ports.go` | Casos de uso, H-01/H-02/H-03, protección de matrices. |
+| Repositorio | `repo/reader.go`, `repo/writer.go`, `repo/sql.go`, `repo/scan.go`, `repo/plantilla.go`, `repo/monedas_codec.go`, `repo/querier.go` | SQL, escaneo y serialización superset. No abre pools. |
+| HTTP | `http/routes.go`, `http/deps.go`, `http/handler_read.go`, `http/handler_write.go`, `http/handler_plantilla.go`, `http/response.go` | Ocho rutas canónicas y envelopes de compatibilidad. |
+| Migraciones | `migrations/0001_init.sql`, `migrations/0002_superset.sql` | Referencia; no se ejecutan automáticamente. |
+
+`repo.Querier` es una interfaz local compatible con `*pgxpool.Pool` de `platform/postgres`. El servicio depende de `Lector` y `Escritor` (puertos pequeños) para poder probar las reglas sin PostgreSQL.
+
+La fachada histórica de Tasas conserva su endpoint de actualización de socios, pero ya no construye SQL de escritura: `internal/perfiles/repo/tasas_legacy.go` es el adaptador de compatibilidad que ejecuta el `UPDATE` con las columnas opcionales. `tasas/store` solo codifica `monedas` y descubre las columnas existentes. Así se preserva el contrato de Fase 6 sin reintroducir un segundo escritor de `perfiles_glaukov`.
+
+### 7.2 Esquema de `perfiles_glaukov`
+
+| Columna | Tipo | Contrato |
+|---|---|---|
+| `id_grupo` | `text` | JID del grupo. Un alta sin JID guarda `''` y emite `WARN`; **nunca** se genera `nombre+"_JID"` (H-03). |
+| `nombre` | `text` | Identidad canónica. El índice único es `UPPER(BTRIM(nombre))`. |
+| `rol` | `text` | Default `SOCIO`. |
+| `moneda_base` | `text` | Default `USDT`. |
+| `saldo_inicial` | `numeric` | Se lee y serializa como string para conservar el contrato de `node-pg`. |
+| `mostrar` | `jsonb` | `{"tasas": boolean, "dashboard": boolean}`. `mostrar.tasas` manda para H-02. |
+| `monedas` | `jsonb` | Mapa ISO → superset de §7.4. |
+| `herencia` | `boolean` | Indica que el socio usa las reglas de la matriz. |
+| `recordar_mostrar` | `jsonb` | Copia temporal de `mostrar` para memorizar/restaurar. La crea `0001_init.sql`. |
+
+`0001_init.sql` añade `recordar_mostrar` y el índice único. `0002_superset.sql` solo audita conflictos y cobertura: la normalización masiva queda para la fase 12 con backup y fixtures. Ninguna migración se ejecuta desde un request.
+
+### 7.3 Actividad H-02
+
+`mostrar.tasas` es la fuente de verdad. La columna legada `activo`, si existiera, **solo puede apagar**; un `true` no enciende a un socio apagado en Perfiles. El campo público `activo` se deriva y es de solo lectura: `GuardarRequest` no lo declara y cualquier valor enviado se ignora.
+
+| `mostrar.tasas` | Columna `activo` | Resultado |
+|---|---|---|
+| `true` | `nil` (no existe) | `true` |
+| `true` | `true` | `true` |
+| `true` | `false` | `false` |
+| `false` | `nil`, `true` o `false` | `false` |
+
+`service.Actividad` implementa la tabla y `service.ActividadDePerfil` la aplica al leer. El repositorio actual no escribe la columna legada: `Toggle` solo modifica `mostrar.tasas`.
+
+### 7.4 Codec `monedas`
+
+El codec lee las tres formas históricas y siempre escribe el superset completo:
+
+| Origen | Forma de entrada | Claves que aporta |
+|---|---|---|
+| Tasas | `porcentaje: {deposito, pago}` | `porcentaje` |
+| Perfiles | `def`, `deposito`, `dep_op`, `pago`, `pago_op` | operadores y valores planos |
+| Comprobantes | `tipo`, `polar_D`, `polar_P`, `polaridad`, `porcentaje` | tipo y polaridades |
+
+Al leer:
+
+1. Si falta `def`/`tipo`, se usa `"D"`.
+2. Si falta `activo`, se asume `true`.
+3. Si falta un operador, se deriva de su polaridad; si tampoco existe, `dep_op`/`polar_D` usan `"+"` y `pago_op`/`polar_P` usan `"-"`.
+4. Si `porcentaje` y `deposito`/`pago` discrepan, **gana `porcentaje`** y se registra un `WARN` con el socio, el código ISO, el campo y ambos valores. El conflicto también queda disponible en `model.Conflictos` para auditoría.
+
+Al escribir, `repo.encodeMonedas` normaliza el código ISO a mayúsculas y emite estas once claves por moneda:
+
+```json
+{
+  "activo": true,
+  "porcentaje": {"deposito": 2.5, "pago": 1.5},
+  "def": "D",
+  "deposito": 2.5,
+  "dep_op": "+",
+  "pago": 1.5,
+  "pago_op": "-",
+  "tipo": "D",
+  "polar_D": "+",
+  "polar_P": "-",
+  "polaridad": "+"
+}
+```
+
+### 7.5 Endpoints canónicos
+
+`http.Register` monta exactamente estas ocho rutas. Los alias históricos se registran en `cmd/server` reutilizando el mismo `Deps`; no crean un segundo escritor.
+
+| Método | Ruta | Éxito | Error |
+|---|---|---|---|
+| `GET` | `/api/v1/perfiles` | `200` + array raíz de `Perfil`. | `{success:false,error,code}` |
+| `GET` | `/api/v1/perfiles/activos` | `200` + array raíz de nombres. | `{success:false,error,code}` |
+| `POST` | `/api/v1/perfiles/guardar` | `200` + `{success:true,data:Perfil}`. | `{success:false,error,code}` |
+| `POST` | `/api/v1/perfiles/apagar-todos` | `200` + `{success:true,message}`. | `{success:false,error,code}` |
+| `POST` | `/api/v1/perfiles/plantilla/memorizar` | `200` + `{success:true,message}`. | `{success:false,error,code}` |
+| `POST` | `/api/v1/perfiles/plantilla/restaurar` | `200` + `{success:true,message}`. | `{success:false,error,code}` |
+| `PATCH` | `/api/v1/perfiles/:nombre/estado` | `200` + `{success:true,data:Perfil}`. Body `{"activo":boolean}`. | `{success:false,error,code}` |
+| `DELETE` | `/api/v1/perfiles/:nombre` | `200` + `{success:true}`. | `{success:false,error,code}` |
+
+Códigos de error: `JSON_INVALIDO`, `NOMBRE_REQUERIDO`, `ENTIDAD_PROTEGIDA`, `NO_ENCONTRADO` y `ERROR_INTERNO`. Los errores de persistencia no exponen SQL.
+
+`GuardarRequest` acepta alias como `socio`/`nombre_socio`, `jid`/`grupo`, `moneda`/`monedaBase` y `saldo`. El campo canónico siempre gana sobre el alias. `saldo_inicial` acepta número o cadena numérica.
+
+### 7.6 Plantilla y protecciones
+
+- `GENERAL` no puede eliminarse ni apagarse por `PATCH`; la petición se ignora y se fuerza activo.
+- `FUNDDA` no puede eliminarse. Es la matriz que consume el modo `herencia`.
+- `apagar-todos` mantiene `GENERAL` activo y apaga `mostrar.tasas` del resto.
+- `memorizar` copia `mostrar` a `recordar_mostrar`; `restaurar` recupera la copia y fuerza `GENERAL` activo.
+- Un `id_grupo` ausente se persiste como `""` con `WARN`; no se inventa ningún JID.
+
+### 7.7 Verificación
+
+```powershell
+$env:CGO_ENABLED = "1"   # -race requiere cgo y gcc en PATH
+gofmt -l .
+go vet ./...
+go test ./internal/perfiles/... -race -v -count=1
+go test ./...
+```
+
+Auditoría D-12 (debe devolver `escrituras_fuera_de_perfiles=0`):
+
+```powershell
+$files = Get-ChildItem . -Recurse -File -Filter *.go |
+  Where-Object { $_.FullName -notmatch '\\internal\\perfiles\\' }
+$files | Select-String -Pattern '(?i)\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+perfiles_glaukov\b'
+```
+
+Los tests cubren las tres formas de `monedas`, round-trip al superset, conflicto con `WARN`, tabla H-02, H-03 sin `_JID`, protección de matrices, ocho rutas HTTP y el upsert con código normalizado.
 
 ## 8. Dominio Comprobantes
 
