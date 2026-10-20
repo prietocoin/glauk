@@ -4,30 +4,37 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const rollbackTimeout = 5 * time.Second
 
-type txBeginner interface {
+// Beginner is the minimal transaction opener shared by *pgxpool.Pool and the
+// pgxmock pool used in repository tests.
+type Beginner interface {
 	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 }
 
 // WithTx runs fn inside a transaction and guarantees rollback on error or
 // panic. A rollback after a successful commit returns pgx.ErrTxClosed and is
 // deliberately ignored.
-func WithTx(ctx context.Context, pool *pgxpool.Pool, opts pgx.TxOptions,
+func WithTx(ctx context.Context, beginner Beginner, opts pgx.TxOptions,
 	fn func(pgx.Tx) error) error {
-	if pool == nil {
+	if beginner == nil || isNilBeginner(beginner) {
 		return fmt.Errorf("pool de PostgreSQL nil")
 	}
-	return withTx(ctx, pool, opts, fn)
+	return withTx(ctx, beginner, opts, fn)
 }
 
-func withTx(ctx context.Context, beginner txBeginner, opts pgx.TxOptions,
+func isNilBeginner(beginner Beginner) bool {
+	value := reflect.ValueOf(beginner)
+	return value.Kind() == reflect.Ptr && value.IsNil()
+}
+
+func withTx(ctx context.Context, beginner Beginner, opts pgx.TxOptions,
 	fn func(pgx.Tx) error) error {
 	tx, err := beginner.BeginTx(ctx, opts)
 	if err != nil {

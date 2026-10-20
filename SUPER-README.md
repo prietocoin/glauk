@@ -578,7 +578,156 @@ Los tests cubren las tres formas de `monedas`, round-trip al superset, conflicto
 
 ## 8. Dominio Comprobantes
 
-Auditoría, snapshot congelado, reglas financieras, endpoints, consola admin, SQL, proyección y errores.
+> Fase 8 implementada. `internal/comprobantes` es el único dueño de `comprobantes_raw`, `comprobantes_liq`, `impactos_raw` y de la consola `cola_fb`. Tasas y Perfiles se leen, nunca se escriben desde este dominio (D-12).
+
+### 8.1 Mapa de archivos
+
+| Capa | Archivos | Responsabilidad |
+|---|---|---|
+| Dominio | `domain/comprobante.go`, `domain/liquidacion.go`, `domain/lote_tasa.go`, `domain/filters.go`, `domain/admin.go`, `domain/report.go`, `domain/money.go`, `domain/errors.go` | Entidades, filtros, errores y contratos del puerto de Reportes. |
+| DTO | `dto/optional_float.go`, `dto/list_filters.go`, `dto/liquidar.go`, `dto/update.go`, `dto/liquidacion.go`, `dto/api_response.go` | Payloads, alias legacy y distinción ausente/cero. |
+| Cálculo | `calc/snapshot.go`, `calc/profile.go`, `calc/amounts.go`, `calc/polarity.go`, `calc/precision.go`, `calc/rates.go`, `calc/projection.go`, `calc/source_row.go` | Snapshot congelado, herencia, spread, truncado y proyección. |
+| Persistencia | `store/repository_list.go`, `store/sql_list.go`, `store/row_list.go`, `store/repository_mutate.go`, `store/sql_mutate.go`, `store/repository_mutation_read.go`, `store/repository_fundda.go`, `store/rates.go`, `store/admin.go`, `store/report_reader.go`, `store/sql_report.go` | SQL, transacciones y escaneo. |
+| Servicio | `service/list.go`, `service/rates.go`, `service/snapshot.go`, `service/mutate.go`, `service/admin.go`, `service/report_reader.go`, `service/ports.go` | Casos de uso y coordinación transaccional. |
+| HTTP | `http/routes.go`, `http/deps.go`, `http/handler_list.go`, `http/handler_tasas.go`, `http/handler_mutate.go`, `http/handler_admin.go`, `http/response.go` | Siete rutas canónicas y tres rutas admin. |
+| Migración | `migrations/0001_impactos_soft_delete.sql` | Columna `eliminado_en` e índice parcial de impactos vigentes. |
+
+`store.DB` es una interfaz local compatible con `*pgxpool.Pool` y con `pgxmock`. Las mutaciones usan `platform/postgres.WithTx`; por eso `WithTx` acepta el puerto `postgres.Beginner` y conserva el rollback ante error o pánico.
+
+### 8.2 Modelo de datos
+
+| Tabla | Uso en Comprobantes |
+|---|---|
+| `comprobantes_raw` | Fila base extraída de WhatsApp: monto, moneda, banco, titular, referencia, imagen y estado IA. `PUT` la edita; `DELETE` la elimina. |
+| `comprobantes_liq` | Snapshot congelado por `hash_largo`. Es la fuente de verdad de importes, tasas y polaridad una vez liquidado. |
+| `impactos_raw` | Evidencia cruda de los mensajes. El listado toma el primer impacto por hash. El borrado de un comprobante la marca con `eliminado_en = NOW()`; no destruye la evidencia. |
+| `cola_fb` | Cola raw de la consola administrativa. Máximo 100 filas por consulta, orden `timestamp DESC`. |
+| `comprobantes_fb` | Tabla raw histórica; se elimina junto con la cola en la misma transacción. |
+| `comprobantes_auditados_fb` | Tabla raw auditada; misma regla transaccional que `comprobantes_fb`. |
+| `tasas_glaukov` | Solo lectura. Se usa el lote asignado o, si no existe, el más reciente. |
+| `perfiles_glaukov` | Solo lectura. Aporta socio, rol, moneda base, `herencia` y configuración `monedas`. |
+
+`migrations/0001_impactos_soft_delete.sql` es idempotente y **no** se ejecuta desde un request. Debe aplicarse antes de desplegar el binario porque el listado y los filtros de Reportes excluyen `eliminado_en IS NOT NULL`.
+
+### 8.3 Snapshot congelado
+
+Entrada: `hash_largo`, monto, moneda, tipo manual (`D`, `P`, `A`) e ID de lote. El motor lee el lote y los perfiles dentro de la misma transacción del `PUT`; `Liquidar` recibe el snapshot ya calculado por el panel y lo persiste idempotentemente.
+
+Defaults de tasas: `USD=1`, `USDT=1`, `PYUSD=1.2`, `ECU=1`, `PAN=1`. El JSONB del lote se superpone; una tasa `0`, `NaN` o `Inf` cae a `1`.
+
+Precisión:
+
+| Valor | Regla |
+|---|---|
+| Monto | Dos decimales por truncado con epsilon `1e-7`, conservando signo. |
+| Tasa comercial (proyección) | Dos decimales; si el valor absoluto supera `99.99`, se trunca a entero; `0`/inválida usa `1`. |
+| Tasa snapshot | Precisión adaptativa según magnitud; conserva el comportamiento del legado. |
+| Spread | `D`/`A`: `1 + deposito%`; `P`: `1 - pago%`. Los porcentajes se usan en valor absoluto. |
+
+Polaridad:
+
+| Caso | Signo |
+|---|---|
+| `A` | Socio 1 `+`; socio 2 `-`. |
+| `D` | `polaridad = "+"` → `+`; en otro caso `-`. |
+| `P` | `polaridad = "+"` → `-`; en otro caso `+`. |
+| Herencia | Si exactamente un lado tiene `herencia=true`, su signo se invierte para quedar opuesto al lado no heredante. Si ambos heredan, no hay override. |
+| `FUNDDA` | Cuando un lado hereda y existe `FUNDDA`, se usan las `monedas` de `FUNDDA`; si falta la divisa, el contrato por defecto es `tipo=D`, `polar_D="+"`, `polar_P="-"`. |
+| `GENERAL` o nombre vacío | Lado inactivo: monto `0`, tasa `1`, ME `0`. |
+
+Ejemplos dorados:
+
+| Caso | Entrada | Resultado |
+|---|---|---|
+| D estándar | `400000 COP`, tasa `4000`, polaridad `+` | `100 / 4000 / 100`; socio 2 `0 / 1 / 0`. |
+| A misma moneda | `1500 USDT`, tasa `1` | `1500 / 1 / 1500`; tipo `A-USDT`. |
+| D negativa | `400000 COP`, tasa `4000`, polaridad `-` | `-100 / 4000 / -100`. |
+| Herencia FUNDDA | `1000000 COP`, tasa `1000`, depósito `2%`, socio 2 ancla `+` | Socio 1 `-980.39 / 1020 / -980.39`; socio 2 `1000 / 1000 / 1000`. |
+| P con pago | `1000000 COP`, tasa `1000`, pago `3%` | `-1030.92 / 970 / -1030.92`. |
+
+### 8.4 Proyección del listado
+
+`calc.ProjectRow` parte del monto absoluto truncado, resuelve socios e idioma de operación y, si la fila está liquidada, reaplica la polaridad sobre las magnitudes congeladas. Si no está liquidada, calcula en vivo con el lote histórico asignado. El tipo visible siempre es `letra-divisa` (`D-COP`, `A-USDT`, `P-COP`). `GENERAL` se serializa como `nombre_socio_2: null`; un array vacío se serializa como `[]`, nunca `null`.
+
+### 8.5 Endpoints canónicos
+
+| Método | Ruta | Contrato |
+|---|---|---|
+| `GET` | `/api/v1/comprobantes` | Array raíz. Filtros `socio`, `rol`, `fechaInicio`, `fechaFin`, `hash`, `orden`. Fechas inválidas → `400`. Orden inválido → `fecha_desc`. Límite 100. |
+| `POST` | `/api/v1/comprobantes/liquidar` | `{success,message,data}` con snapshot. `hash_largo` obligatorio; valores no finitos → `400`. |
+| `POST` | `/api/v1/comprobantes/:hashLargo/releer` | Marca `estado_ia='RE-PROCESANDO'` y `procesado_ia=false`. No llama a Gemini. |
+| `PUT` | `/api/v1/comprobantes/:hashLargo` | Edita `comprobantes_raw`, recalcula snapshot y hace upsert en `comprobantes_liq` dentro de una transacción. `404` si no existe. |
+| `DELETE` | `/api/v1/comprobantes/:hashLargo` | Borra `comprobantes_liq`, marca `impactos_raw.eliminado_en` y borra `comprobantes_raw` en la misma transacción. |
+| `GET` | `/api/v1/comprobantes/tasas/ultimas` | Lote vigente o fallback `T001`; nunca `404`. |
+| `GET` | `/api/v1/comprobantes/tasas/historial` | Últimos 20 lotes; array posiblemente vacío. |
+
+`PUT` acepta los alias `socio1`/`socio_1`/`nombre_socio_1`, `socio2`/`socio_2`/`nombre_socio_2`, `moneda`/`moneda_recibo`, `id_tasa`/`lote_tasa`/`lote_tasa_asignado`, `tipo_manual`/`tipo_op1`/`tipo_op`, `monto_1`/`m1_socio` y `monto_2`/`m2_socio`. El campo canónico gana sobre el alias.
+
+`OptionalFloat` distingue un campo omitido de un cero explícito. Acepta número JSON o cadena simple con coma de miles (`"1,500.50"`); rechaza `NaN`, `Inf` y el formato local completo (`"1.500,50"`).
+
+### 8.6 Consola administrativa
+
+| Método | Ruta | Entrada | Salida |
+|---|---|---|---|
+| `GET` | `/api/v1/admin/cola` | `X-Admin-Key` | `{success:true,data:[...]}` con `Cache-Control: no-store`. |
+| `PUT` | `/api/v1/admin/cola/:hashLargo` | `X-Admin-Key` + `UpdateInput` | `{success:true,data}`. `nombre_socio_1/2` se reemplazan; `estado`/`conteo` aplican defaults legacy y `timestamp` se conserva si se omite. |
+| `DELETE` | `/api/v1/admin/cola/:hashLargo` | `X-Admin-Key` | `{success:true,message}`. Borra las tres tablas raw en una transacción. |
+
+H-06: `ADMIN_API_KEY` vacía → `503 ADMIN_DISABLED` en todas las rutas admin. Clave incorrecta → `401 UNAUTHORIZED`. La comparación usa `platform/httpx.VerifyAdmin` y `subtle.ConstantTimeCompare`; nunca se acepta por query string ni por URL. La clave hardcodeada `ATENEA` fue eliminada. Los datos de cola pueden contener PII y no se cachean.
+
+### 8.7 SQL e índices
+
+- `store/sql_list.go` conserva el CTE legacy: primer y segundo impacto, `comprobantes_liq`, perfiles por nombre/JID y lote histórico. Añade `eliminado_en IS NULL` al CTE de impactos.
+- `store/sql_mutate.go` fija el `UPSERT` de `comprobantes_liq`, el `UPDATE` de `comprobantes_raw`, el marcado lógico de impactos y el borrado base.
+- `store/repository_mutation_read.go` usa `SELECT ... FOR UPDATE` antes de recalcular.
+- `store/sql_report.go` comparte el `FROM` de Reportes para movimientos y resumen, siempre con impactos vigentes.
+- La migración crea un índice parcial `LOWER(BTRIM(hash_largo)) WHERE eliminado_en IS NULL`. Se recomienda mantener además índices sobre `comprobantes_raw(creado_en)`, `comprobantes_liq(LOWER(BTRIM(hash_largo)))` y `impactos_raw(LOWER(BTRIM(hash_largo)))`.
+
+### 8.8 Puerto de Reportes
+
+`service.ReportReader` es una interfaz propia de Comprobantes, no de Reportes:
+
+```go
+type ReportReader interface {
+    FiltrosReporte(ctx context.Context, rol string) (ReportFilters, error)
+    MovimientosReporte(ctx context.Context, q ReportQuery) ([]ReportRow, error)
+    ResumenReporte(ctx context.Context, q ReportQuery) (ReportSummary, error)
+}
+```
+
+`store.Repository` implementa las tres consultas en `store/report_reader.go`; el adaptador de `internal/reportes` solo traduce tipos. Reportes no ejecuta SQL ni conoce `comprobantes_liq`. `FiltrosReporte` devuelve roles, entidades y hasta 100 hashes recientes; `MovimientosReporte` filtra por rol, entidad, hash y fechas inclusivas; `ResumenReporte` agrupa por moneda y devuelve total, monto, rango y mapa por divisa.
+
+### 8.9 Errores y validaciones
+
+| Código HTTP | Código estable | Causa |
+|---|---|---|
+| `400` | `VALIDATION_ERROR` | JSON inválido, hash vacío, fecha inválida, valor no finito. |
+| `401` | `UNAUTHORIZED` | Clave admin incorrecta. |
+| `404` | `NOT_FOUND` | Comprobante o fila de cola inexistente. |
+| `500` | `INTERNAL_ERROR` | Fallo de PostgreSQL u otro error no clasificado; no se expone SQL. |
+| `503` | `ADMIN_DISABLED` | `ADMIN_API_KEY` vacía. |
+
+### 8.10 Verificación
+
+```powershell
+$env:CGO_ENABLED = "1"   # -race requiere cgo y gcc en PATH
+gofmt -l .
+go vet ./...
+go test ./internal/comprobantes/... -race -v -count=1
+go test ./...
+```
+
+Tests obligatorios cubiertos:
+
+- Golden de snapshot para D/A, polaridad `+`/`-`, herencia y `FUNDDA`.
+- `OptionalFloat` ausente vs cero, coma de miles y rechazo de `NaN`/`Inf`.
+- Alias de `PUT`: `socio1`, `moneda_recibo`, `id_tasa`.
+- `DELETE` marca `impactos_raw` dentro de la misma transacción y hace rollback si falla el marcado.
+- Admin con `ADMIN_API_KEY` vacía → `503`; clave incorrecta → `401`; clave válida → `200` con `no-store`.
+- Listado con fechas inválidas → `400`.
+- Smoke de las siete rutas canónicas y de las tres rutas admin.
+
+Límites: archivos de producción entre 30 y 180 líneas; tests ≤220 líneas. `gofmt -l .` debe quedar vacío.
 
 ## 9. Dominio Reportes
 
