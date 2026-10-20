@@ -187,7 +187,265 @@ Todos los archivos de producción respetan 30–180 líneas y los tests ≤220 l
 
 ## 6. Dominio Tasas
 
-Modelo, 13 endpoints, cálculo, triangulación, render PNG, HOO, publicación, modo prueba, errores y ejemplos.
+> Fase 6 implementada. El dominio Tasas se migró desde `Tasas/internal/modules/tasas` sin cambiar su comportamiento observable: los fixtures dorados del calculador siguen pasando, las trece rutas conservan sus contratos y la publicación aplica H-02 antes de enviar una sola cartelera.
+
+### 6.1 Estructura
+
+| Ruta | Responsabilidad |
+|---|---|
+| `internal/tasas/domain/` | `Perfil`, `Moneda`, `Lote`, `TarjetaPais` y `Cartelera`. No conoce SQL, HTTP ni render. |
+| `internal/tasas/calculator/` | Cálculo puro de carteleras, triangulación, precisión y tendencia. Recibe el instante por parámetro. |
+| `internal/tasas/store/` | Única puerta a `perfiles_glaukov`, `tasas_glaukov` y `notificaciones_tasas`. Recibe un `Querier`; no abre pools. |
+| `internal/tasas/service/` | Casos de uso: publicar, publicar por ID, reenviar, cartelera, envío, concurrencia y administración. |
+| `internal/tasas/http/` | Traduce Fiber a servicio y devuelve los contratos JSON/PNG. No escribe SQL ni abre clientes. |
+| `internal/tasas/hoo/` | Contrato y cliente del borrador externo HOO. |
+| `internal/tasas/render/` | PNG en memoria con `gg`, assets embebidos de banderas, fondo, logo y fuente. |
+| `internal/tasas/calculator/testdata/golden_calculator.json` | Fixture congelado del servicio Node, ejecutado por `TestGolden`. |
+
+Las dependencias externas entran por `platform/postgres` y `platform/evolution`. Tasas no crea un `pgxpool` ni un cliente HTTP de Evolution propios: el pool y el `Sender` se inyectan desde `cmd/server`.
+
+### 6.2 Actividad del socio (H-02)
+
+`mostrar->>'tasas'` es la fuente de verdad. La columna `activo` es un interruptor opcional que **solo puede apagar**; nunca enciende a un socio que Perfiles apagó.
+
+```text
+publicar(socio) =
+    mostrar.tasas == true
+    AND (activo inexistente OR activo IS NULL OR activo == true)
+```
+
+| `mostrar.tasas` | `activo` | ¿Se publica? |
+|---|---|---|
+| ausente | cualquiera | No |
+| `false` | `true` | No |
+| `true` | ausente / `NULL` | Sí |
+| `true` | `true` | Sí |
+| `true` | `false` | No |
+
+La decisión vive en `service.activosDe`/`activoParaTasas` y tiene una tabla de verdad en `service_test.go`. El store solo transporta `mostrar` y `activo`; no decide por su cuenta.
+
+### 6.3 Cálculo y triangulación
+
+- La moneda base del socio se resuelve con `BaseRate`. Las divisas de referencia (`USD`, `USDT`, etc.) valen `1`; una cotización ausente, cero o no numérica también cae a `1` para evitar divisiones imposibles.
+- Cada divisa configurada genera una tarjeta si no está apagada, si el lote la cotiza o es de referencia, y si la tasa normalizada no es cero.
+- La triangulación es `CrossRate = tasa / base`: expresa cada divisa en unidades de la moneda nativa del socio.
+- Compra y venta se calculan con los márgenes del perfil, en valor absoluto:
+  - `compra = CrossRate × (1 + deposito/100)`
+  - `venta = CrossRate / (1 + pago/100)`
+- La regla de precisión redondea a ocho decimales y luego trunca por magnitud: entero por encima de `99.99`, dos decimales desde `10` y resolución fina por debajo. El comportamiento del original, incluido su defecto conocido en valores ínfimos, se conserva para no alterar ninguna cartelera.
+- La tendencia compara la tasa cruzada actual con la del lote anterior: `up`, `down` o `equal`. Con un solo lote, el anterior es el mismo.
+- La fecha y hora se publican con el locale histórico de Caracas (`17-oct`, `12:00`), usando un desplazamiento fijo UTC-4 y sin depender de tzdata del sistema.
+- Las tarjetas se ordenan por código para que el resultado no dependa del orden del mapa.
+
+### 6.4 Rutas canónicas (13)
+
+| # | Método | Ruta | Entrada | Salida 200 | Errores |
+|---:|---|---|---|---|---|
+| 1 | `GET` | `/api/v1/tasas/monitor` | — | `{success,id_tasa,tasas}` | 500 |
+| 2 | `GET` | `/api/v1/tasas/socios` | — | `{success,socios[]}` | 500 |
+| 3 | `GET` | `/api/v1/tasas/hoo-borrador` | — | `{success,borrador}` | 500 |
+| 4 | `PUT` | `/api/v1/tasas/socios/:socio` | `SocioUpdate` | `{success,socio}` | 400/404/500 |
+| 5 | `POST` | `/api/v1/tasas/guardar-lote` | `{tasas}` | `{success,id_tasa,registro}` | 400/500 |
+| 6 | `POST` | `/api/v1/tasas/publicar-lote` | `{modo_prueba_global?}` | `{success,id_tasa,procesados,detalle[]}` | 400/500 |
+| 7 | `POST` | `/api/v1/tasas/notificar-remesas` | vacío | `{success,notificacion:{id_tasa}}` | 500 |
+| 8 | `GET` | `/api/v1/tasas/calcular/:socio` | — | `{success,datos}` | 404/500 |
+| 9 | `GET` | `/api/v1/tasas/render/:socio` | — | `image/png` | 404/500 texto |
+| 10 | `POST` | `/api/v1/tasas/render` | `{socio}` | `image/png` | 404/500 texto |
+| 11 | `POST` | `/api/v1/tasas/disparar` | `{socio,modo_prueba?}` | `{success,socio,evolutionResponse}` | 400/404/500 |
+| 12 | `POST` | `/api/v1/tasas/disparar-lote` | `{modo_prueba_global?}` | Igual que #6 | 400/500 |
+| 13 | `DELETE` | `/api/v1/tasas/lote/:id_tasa` | — | `{success,message}` | 400/404/500 |
+
+`GET /render/:socio` y `POST /render` son dos formas de entrar al mismo handler. `POST /disparar-lote` comparte exactamente la lógica de `POST /publicar-lote`, como en el servicio Node.
+
+### 6.5 Contratos JSON
+
+**#1 Monitor**
+
+```json
+{"success":true,"id_tasa":"T052","tasas":{"USD":1,"USDT":1,"ARS":1250.5,"EUR":0.92}}
+```
+
+Sin lotes: `{"success":true,"id_tasa":"T000","tasas":{}}`. Nunca responde 404.
+
+**#2 Socios**
+
+```json
+{
+  "success": true,
+  "socios": [
+    {
+      "nombre": "FUNDABLOCK",
+      "id_grupo": "120363012345678901@g.us",
+      "moneda_base": "USDT",
+      "monedas": {
+        "ARS": {"activo": true, "porcentaje": {"deposito": 2.5, "pago": 1.5}}
+      },
+      "activo": true,
+      "modo_prueba": false,
+      "rol": "SOCIO"
+    }
+  ]
+}
+```
+
+`monedas` nunca es `null`; si el perfil no tiene, se devuelve `{}`. Un rol vacío se normaliza a `SOCIO`.
+
+**#3 HOO**
+
+```json
+{"success":true,"borrador":{"ID":"...","USD":1,"ARS":1250.5,"CREATED_AT":"2026-10-20T12:00:00.000Z"}}
+```
+
+El objeto completo tiene los veinte campos de `hoo/mapeo.go`. Si el origen no está configurado: `500 {"success":false,"error":"origen HOO no configurado"}`.
+
+**#4 Guardar socio**
+
+```json
+{
+  "monedas": {
+    "ARS": {"activo": true, "porcentaje": {"deposito": 2.5, "pago": 1.5}}
+  },
+  "activo": true,
+  "modo_prueba": false,
+  "rol": "SOCIO"
+}
+```
+
+Todos los campos son opcionales; un campo ausente **no se escribe**. `monedas` se escribe con el codec superset. Respuesta:
+
+```json
+{"success":true,"socio":{"nombre":"FUNDABLOCK","monedas":{},"activo":true,"modo_prueba":false,"rol":"SOCIO"}}
+```
+
+404 si el socio no existe. El legado respondía éxito con un objeto vacío.
+
+**#5 Guardar lote**
+
+```json
+{"tasas":{"USD":1,"USDT":1,"ARS":1250.5,"CREATED_AT":"2026-10-20T12:00:00.000Z"}}
+```
+
+Respuesta:
+
+```json
+{"success":true,"id_tasa":"T053","registro":{"id_tasa":"T053","tasas":{"USD":1,"USDT":1,"ARS":1250.5}}}
+```
+
+`tasas` es obligatorio y no vacío. Si falta `CREATED_AT`, se sella en UTC con formato `2006-01-02T15:04:05.000Z`; el ID se deriva del último lote (`T###`).
+
+**#6 / #12 Publicar**
+
+```json
+{"modo_prueba_global":false}
+```
+
+Respuesta:
+
+```json
+{
+  "success": true,
+  "id_tasa": "T053",
+  "procesados": 3,
+  "detalle": [
+    {"socio":"FUNDABLOCK","status":"ok"},
+    {"socio":"GENERAL","status":"error","error":"evolution api: estado 401"}
+  ]
+}
+```
+
+`procesados` cuenta solo socios activos según H-02. Los errores parciales no convierten la respuesta en 500: el lote se publicó para el resto y `detalle` es la fuente de verdad. Sin lotes: `400 {"success":false,"error":"No hay lotes guardados en tasas_glaukov para publicar."}`.
+
+**#7 Notificar remesas**
+
+Sin cuerpo. Inserta la notificación del lote vigente y devuelve:
+
+```json
+{"success":true,"notificacion":{"id_tasa":"T053"}}
+```
+
+**#8 Calcular**
+
+```json
+{
+  "success": true,
+  "datos": {
+    "nombre_socio": "FUNDABLOCK",
+    "moneda_base": "USDT",
+    "lote_tasa": "T053",
+    "fecha_actualizacion": "20-oct",
+    "hora_actualizacion": "12:00",
+    "tarjetas_paises": [
+      {"code":"ARS","pais":"Argentina","nombre_pais":"Argentina","bandera":"ar","compra":1250.5,"venta":1262.5,"trend":"up"}
+    ]
+  }
+}
+```
+
+Un socio inexistente responde `404 {"success":false,"error":"Socio no encontrado"}`.
+
+**#9 / #10 Render**
+
+`GET /render/:socio` y `POST /render` con `{"socio":"FUNDABLOCK"}` devuelven `image/png` dibujado en memoria. No hay archivo temporal ni servicio externo. Errores en texto plano:
+
+- `404 Socio no encontrado`
+- `500 Error generando PNG`
+
+**#11 Disparar**
+
+```json
+{"socio":"FUNDABLOCK","modo_prueba":true}
+```
+
+`modo_prueba` ausente toma el valor guardado del socio. Respuesta:
+
+```json
+{"success":true,"socio":"FUNDABLOCK","evolutionResponse":{"status":"SENT","messageId":"3EB0..."}}
+```
+
+**#13 Eliminar lote**
+
+```json
+{"success":true,"message":"Lote T053 eliminado correctamente."}
+```
+
+404 si no existe; 400 si el ID está vacío.
+
+### 6.6 Publicación, modo prueba y Evolution
+
+- `Publicar` lee el lote vigente y el anterior con una sola consulta (`ORDER BY id DESC LIMIT 2`), carga los socios y aplica H-02 antes de abrir workers.
+- El pool de publicación usa cinco workers y un plazo independiente de 30 segundos por socio. Los resultados se recolectan por índice y se ordenan por nombre.
+- En modo prueba, el destino es siempre `JID_GRUPO_PRUEBA`; sin ese valor el envío falla en vez de inventar un grupo.
+- En modo oficial se usa `id_grupo` del socio. Si el socio no tiene grupo, se cae al JID de pruebas para no publicar en un destino vacío.
+- El PNG se envía como `image/png`, base64 puro (sin prefijo `data:`) y `fileName: cartelera.png`.
+- El pie conserva el prefijo histórico: `🚀 [OFICIAL]` o `🧪 [PRUEBA]`, seguido de `Cartelera *socio* — Lote: T###`.
+- El envío usa `platform/evolution.Client.SendMedia`; sus reintentos, timeout y simulación son responsabilidad de ese adaptador.
+
+### 6.7 Render PNG
+
+`render.GenerarCartelera` compone la imagen completa en memoria con `fogleman/gg`. Las banderas, el fondo, el logo y la fuente `Inter-Bold.ttf` están embebidos con `go:embed`; no se leen archivos del filesystem en runtime. La misma cartelera calculada alimenta `/calcular`, `/render` y la publicación, de modo que no existan dos definiciones de lo que se muestra.
+
+### 6.8 Errores
+
+| Condición | Respuesta |
+|---|---|
+| Cuerpo JSON inválido o `tasas` vacío | `400 {success:false,error}` |
+| `id_tasa` vacío al borrar/publicar | `400 {success:false,error}` |
+| Sin lotes para publicar | `400` con el texto histórico |
+| Socio inexistente | `404 {success:false,error}` en JSON; texto plano en render |
+| Lote inexistente | `404 {success:false,error}` |
+| Fallo de PostgreSQL, HOO o Evolution no parcial | `500 {success:false,error}` |
+| Fallo de dibujo | `500 Error generando PNG` |
+| Error de un socio durante publicación | `200` con `detalle[].status = "error"` |
+
+### 6.9 Verificación
+
+```powershell
+$env:CGO_ENABLED = "1"   # -race requiere cgo y gcc en PATH (WinLibs en Windows)
+go test ./internal/tasas/... -race -v
+go test ./internal/tasas/calculator -run TestGolden -v
+```
+
+`routes_test.go` comprueba las trece rutas con `app.GetRoutes()` y ejecuta un smoke de cada endpoint. `service_test.go` fija la tabla de verdad H-02, el filtro de publicación, los errores parciales y la elección de destino. `calculator_test.go` ejecuta el fixture dorado completo contra `golden_calculator.json`.
 
 ## 7. Dominio Perfiles
 

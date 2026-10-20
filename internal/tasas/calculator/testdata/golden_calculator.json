@@ -1,0 +1,1877 @@
+{
+  "generado_por": "node calculator.service.js (caracterizacion del comportamiento actual)",
+  "origen": "old/src/modules/tasas/services/calculator.service.js + old/src/utils/formatters.js",
+  "nota": "Cada caso congela el reloj con su instante_millis, de modo que fecha_actualizacion y hora_actualizacion son reproducibles. El orden de tarjetas_paises sigue el del objeto monedas tal como lo inserta este generador (claves ordenadas).",
+  "casos": [
+    {
+      "nombre": "catalogo_completo_18_monedas",
+      "instante_millis": 1792290900000,
+      "perfil": {
+        "nombre": "Glaukov",
+        "id_grupo": "120363421142957552@g.us",
+        "moneda_base": "USDT",
+        "monedas": {
+          "ARS": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -3,
+              "pago": 0
+            }
+          },
+          "BOB": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -2,
+              "pago": 1
+            }
+          },
+          "BRL": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -1,
+              "pago": 2
+            }
+          },
+          "CAD": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 3
+            }
+          },
+          "CLP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 1,
+              "pago": 4
+            }
+          },
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 2,
+              "pago": 0
+            }
+          },
+          "CRC": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 3,
+              "pago": 1
+            }
+          },
+          "DOP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -3,
+              "pago": 2
+            }
+          },
+          "ECU": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -1,
+              "pago": 1
+            }
+          },
+          "EUR": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -2,
+              "pago": 3
+            }
+          },
+          "MXN": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -1,
+              "pago": 4
+            }
+          },
+          "PAN": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 2
+            }
+          },
+          "PEN": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "PYG": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 1,
+              "pago": 1
+            }
+          },
+          "PYUSD": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -3,
+              "pago": 4
+            }
+          },
+          "USD": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 2,
+              "pago": 2
+            }
+          },
+          "USDT": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 3,
+              "pago": 3
+            }
+          },
+          "VES": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -2,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T059",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "lote_anterior": {
+        "id_tasa": "T058",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4000,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.95,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "esperado": {
+        "nombre_socio": "Glaukov",
+        "id_grupo": "120363421142957552@g.us",
+        "moneda_base": "USDT",
+        "lote_tasa": "T059",
+        "fecha_actualizacion": "17-oct",
+        "hora_actualizacion": "22:35",
+        "tarjetas_paises": [
+          {
+            "code": "ARS",
+            "nombre_pais": "Argentina",
+            "bandera": "ar",
+            "compra": 1494,
+            "venta": 1450,
+            "trend": "equal"
+          },
+          {
+            "code": "BOB",
+            "nombre_pais": "Bolivia",
+            "bandera": "bo",
+            "compra": 7.09,
+            "venta": 6.89,
+            "trend": "equal"
+          },
+          {
+            "code": "BRL",
+            "nombre_pais": "Brazil",
+            "bandera": "br",
+            "compra": 5.47,
+            "venta": 5.31,
+            "trend": "equal"
+          },
+          {
+            "code": "CAD",
+            "nombre_pais": "Canada",
+            "bandera": "ca",
+            "compra": 1.36,
+            "venta": 1.32,
+            "trend": "equal"
+          },
+          {
+            "code": "CLP",
+            "nombre_pais": "Chile",
+            "bandera": "cl",
+            "compra": 954,
+            "venta": 908,
+            "trend": "equal"
+          },
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 4131,
+            "venta": 4050,
+            "trend": "up"
+          },
+          {
+            "code": "CRC",
+            "nombre_pais": "Costa Rica",
+            "bandera": "cr",
+            "compra": 535,
+            "venta": 514,
+            "trend": "equal"
+          },
+          {
+            "code": "DOP",
+            "nombre_pais": "Dominicana",
+            "bandera": "do",
+            "compra": 60.25,
+            "venta": 57.35,
+            "trend": "equal"
+          },
+          {
+            "code": "ECU",
+            "nombre_pais": "Ecuador",
+            "bandera": "ec",
+            "compra": 1.01,
+            "venta": 0.99,
+            "trend": "equal"
+          },
+          {
+            "code": "EUR",
+            "nombre_pais": "Europa",
+            "bandera": "eu",
+            "compra": 0.938,
+            "venta": 0.893,
+            "trend": "down"
+          },
+          {
+            "code": "MXN",
+            "nombre_pais": "Mexico",
+            "bandera": "mx",
+            "compra": 17.32,
+            "venta": 16.49,
+            "trend": "equal"
+          },
+          {
+            "code": "PAN",
+            "nombre_pais": "Panama",
+            "bandera": "pa",
+            "compra": 1,
+            "venta": 0.98,
+            "trend": "equal"
+          },
+          {
+            "code": "PEN",
+            "nombre_pais": "Peru",
+            "bandera": "pe",
+            "compra": 3.74,
+            "venta": 3.74,
+            "trend": "equal"
+          },
+          {
+            "code": "PYG",
+            "nombre_pais": "Paraguay",
+            "bandera": "py",
+            "compra": 7373,
+            "venta": 7227,
+            "trend": "equal"
+          },
+          {
+            "code": "PYUSD",
+            "nombre_pais": "PayPal USD",
+            "bandera": "us",
+            "compra": 1.03,
+            "venta": 0.961,
+            "trend": "equal"
+          },
+          {
+            "code": "USD",
+            "nombre_pais": "EEUU-Zelle",
+            "bandera": "us",
+            "compra": 1.02,
+            "venta": 0.98,
+            "trend": "equal"
+          },
+          {
+            "code": "USDT",
+            "nombre_pais": "Tether",
+            "bandera": "us",
+            "compra": 1.03,
+            "venta": 0.97,
+            "trend": "equal"
+          },
+          {
+            "code": "VES",
+            "nombre_pais": "Venezuela",
+            "bandera": "ve",
+            "compra": 37.23,
+            "venta": 36.5,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "base_pen_triangulada",
+      "instante_millis": 1772323800000,
+      "perfil": {
+        "nombre": "Socio Peru",
+        "id_grupo": "",
+        "moneda_base": "PEN",
+        "monedas": {
+          "ARS": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 5,
+              "pago": 5
+            }
+          },
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -3,
+              "pago": 4
+            }
+          },
+          "EUR": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "PEN": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 2,
+              "pago": 2
+            }
+          },
+          "USD": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 1.5,
+              "pago": 1.5
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T100",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "lote_anterior": {
+        "id_tasa": "T099",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "esperado": {
+        "nombre_socio": "Socio Peru",
+        "id_grupo": "",
+        "moneda_base": "PEN",
+        "lote_tasa": "T100",
+        "fecha_actualizacion": "28-feb",
+        "hora_actualizacion": "20:10",
+        "tarjetas_paises": [
+          {
+            "code": "ARS",
+            "nombre_pais": "Argentina",
+            "bandera": "ar",
+            "compra": 406,
+            "venta": 368,
+            "trend": "equal"
+          },
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 1113,
+            "venta": 1039,
+            "trend": "equal"
+          },
+          {
+            "code": "EUR",
+            "nombre_pais": "Europa",
+            "bandera": "eu",
+            "compra": 0.245,
+            "venta": 0.245,
+            "trend": "equal"
+          },
+          {
+            "code": "PEN",
+            "nombre_pais": "Peru",
+            "bandera": "pe",
+            "compra": 1.02,
+            "venta": 0.98,
+            "trend": "equal"
+          },
+          {
+            "code": "USD",
+            "nombre_pais": "EEUU-Zelle",
+            "bandera": "us",
+            "compra": 0.271,
+            "venta": 0.263,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "tendencias_up_down_equal_ausente",
+      "instante_millis": 1767240000000,
+      "perfil": {
+        "nombre": "Socio Tendencia",
+        "moneda_base": "USDT",
+        "monedas": {
+          "BOB": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "EUR": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "USD": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T010",
+        "tasas": {
+          "BOB": 6.96,
+          "COP": 4050,
+          "EUR": 0.92,
+          "USD": 1
+        }
+      },
+      "lote_anterior": {
+        "id_tasa": "T009",
+        "tasas": {
+          "COP": 4000,
+          "EUR": 0.95,
+          "USD": 1
+        }
+      },
+      "esperado": {
+        "nombre_socio": "Socio Tendencia",
+        "moneda_base": "USDT",
+        "lote_tasa": "T010",
+        "fecha_actualizacion": "01-ene",
+        "hora_actualizacion": "00:00",
+        "tarjetas_paises": [
+          {
+            "code": "BOB",
+            "nombre_pais": "Bolivia",
+            "bandera": "bo",
+            "compra": 6.96,
+            "venta": 6.96,
+            "trend": "equal"
+          },
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 4050,
+            "venta": 4050,
+            "trend": "up"
+          },
+          {
+            "code": "EUR",
+            "nombre_pais": "Europa",
+            "bandera": "eu",
+            "compra": 0.92,
+            "venta": 0.92,
+            "trend": "down"
+          },
+          {
+            "code": "USD",
+            "nombre_pais": "EEUU-Zelle",
+            "bandera": "us",
+            "compra": 1,
+            "venta": 1,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "sin_lote_anterior",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Nuevo",
+        "moneda_base": "USDT",
+        "monedas": {
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 1,
+              "pago": 2
+            }
+          },
+          "EUR": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 1,
+              "pago": 2
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T001",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio Nuevo",
+        "moneda_base": "USDT",
+        "lote_tasa": "T001",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 4090,
+            "venta": 3970,
+            "trend": "equal"
+          },
+          {
+            "code": "EUR",
+            "nombre_pais": "Europa",
+            "bandera": "eu",
+            "compra": 0.929,
+            "venta": 0.901,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "activo_omitido_y_activo_false",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Discreto",
+        "moneda_base": "USDT",
+        "monedas": {
+          "COP": {
+            "activo": false,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "EUR": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "PEN": {
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T020",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "lote_anterior": {
+        "id_tasa": "T019",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "esperado": {
+        "nombre_socio": "Socio Discreto",
+        "moneda_base": "USDT",
+        "lote_tasa": "T020",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "EUR",
+            "nombre_pais": "Europa",
+            "bandera": "eu",
+            "compra": 0.92,
+            "venta": 0.92,
+            "trend": "equal"
+          },
+          {
+            "code": "PEN",
+            "nombre_pais": "Peru",
+            "bandera": "pe",
+            "compra": 3.74,
+            "venta": 3.74,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "ausentes_no_fijas_se_descartan",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Parcial",
+        "moneda_base": "USDT",
+        "monedas": {
+          "BOB": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "CLP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T030",
+        "tasas": {
+          "COP": 4050
+        }
+      },
+      "lote_anterior": {
+        "id_tasa": "T029",
+        "tasas": {
+          "COP": 4000
+        }
+      },
+      "esperado": {
+        "nombre_socio": "Socio Parcial",
+        "moneda_base": "USDT",
+        "lote_tasa": "T030",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 4050,
+            "venta": 4050,
+            "trend": "up"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "fijas_ausentes_valen_1",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Fijas",
+        "moneda_base": "USDT",
+        "monedas": {
+          "ECU": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "PAN": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "PYUSD": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 3,
+              "pago": 3
+            }
+          },
+          "USD": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "USDT": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T040",
+        "tasas": {}
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio Fijas",
+        "moneda_base": "USDT",
+        "lote_tasa": "T040",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "ECU",
+            "nombre_pais": "Ecuador",
+            "bandera": "ec",
+            "compra": 1,
+            "venta": 1,
+            "trend": "equal"
+          },
+          {
+            "code": "PAN",
+            "nombre_pais": "Panama",
+            "bandera": "pa",
+            "compra": 1,
+            "venta": 1,
+            "trend": "equal"
+          },
+          {
+            "code": "PYUSD",
+            "nombre_pais": "PayPal USD",
+            "bandera": "us",
+            "compra": 1.03,
+            "venta": 0.97,
+            "trend": "equal"
+          },
+          {
+            "code": "USD",
+            "nombre_pais": "EEUU-Zelle",
+            "bandera": "us",
+            "compra": 1,
+            "venta": 1,
+            "trend": "equal"
+          },
+          {
+            "code": "USDT",
+            "nombre_pais": "Tether",
+            "bandera": "us",
+            "compra": 1,
+            "venta": 1,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "cero_numerico_vs_cero_string",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Cero",
+        "moneda_base": "USDT",
+        "monedas": {
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "PEN": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "VES": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T050",
+        "tasas": {
+          "COP": 4050,
+          "PEN": "0",
+          "VES": 0
+        }
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio Cero",
+        "moneda_base": "USDT",
+        "lote_tasa": "T050",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 4050,
+            "venta": 4050,
+            "trend": "equal"
+          },
+          {
+            "code": "VES",
+            "nombre_pais": "Venezuela",
+            "bandera": "ve",
+            "compra": 1,
+            "venta": 1,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "margen_negativo_y_alto",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Margen",
+        "moneda_base": "PEN",
+        "monedas": {
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -7.5,
+              "pago": 12.25
+            }
+          },
+          "PYG": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": -100,
+              "pago": 50
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T060",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "lote_anterior": {
+        "id_tasa": "T059",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "esperado": {
+        "nombre_socio": "Socio Margen",
+        "moneda_base": "PEN",
+        "lote_tasa": "T060",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 1162,
+            "venta": 963,
+            "trend": "equal"
+          },
+          {
+            "code": "PYG",
+            "nombre_pais": "Paraguay",
+            "bandera": "py",
+            "compra": 3898,
+            "venta": 1299,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "rangos_de_precision",
+      "instante_millis": 1798761540000,
+      "perfil": {
+        "nombre": "Socio Rangos",
+        "moneda_base": "PEN",
+        "monedas": {
+          "CLP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "EUR": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "PYG": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T070",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio Rangos",
+        "moneda_base": "PEN",
+        "lote_tasa": "T070",
+        "fecha_actualizacion": "31-dic",
+        "hora_actualizacion": "19:59",
+        "tarjetas_paises": [
+          {
+            "code": "CLP",
+            "nombre_pais": "Chile",
+            "bandera": "cl",
+            "compra": 252,
+            "venta": 252,
+            "trend": "equal"
+          },
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 1081,
+            "venta": 1081,
+            "trend": "equal"
+          },
+          {
+            "code": "EUR",
+            "nombre_pais": "Europa",
+            "bandera": "eu",
+            "compra": 0.245,
+            "venta": 0.245,
+            "trend": "equal"
+          },
+          {
+            "code": "PYG",
+            "nombre_pais": "Paraguay",
+            "bandera": "py",
+            "compra": 1949,
+            "venta": 1949,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "rate_ruidoso_muchos_decimales",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Ruido",
+        "moneda_base": "USD",
+        "monedas": {
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 2.5,
+              "pago": 7.5
+            }
+          },
+          "PEN": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 1,
+              "pago": 1
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T080",
+        "tasas": {
+          "COP": 4050.0000000001,
+          "PEN": 3.7489999999999997
+        }
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio Ruido",
+        "moneda_base": "USD",
+        "lote_tasa": "T080",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 4151,
+            "venta": 3767,
+            "trend": "equal"
+          },
+          {
+            "code": "PEN",
+            "nombre_pais": "Peru",
+            "bandera": "pe",
+            "compra": 3.78,
+            "venta": 3.71,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "rate_string_con_separador_de_miles",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio String",
+        "moneda_base": "USDT",
+        "monedas": {
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "PEN": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T090",
+        "tasas": {
+          "COP": "4,050.50",
+          "PEN": "  3.745 "
+        }
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio String",
+        "moneda_base": "USDT",
+        "lote_tasa": "T090",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 4050,
+            "venta": 4050,
+            "trend": "equal"
+          },
+          {
+            "code": "PEN",
+            "nombre_pais": "Peru",
+            "bandera": "pe",
+            "compra": 3.74,
+            "venta": 3.74,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "clave_en_minuscula",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Minuscula",
+        "moneda_base": "USDT",
+        "monedas": {
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "pen": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T110",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio Minuscula",
+        "moneda_base": "USDT",
+        "lote_tasa": "T110",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 4050,
+            "venta": 4050,
+            "trend": "equal"
+          },
+          {
+            "code": "PEN",
+            "nombre_pais": "Peru",
+            "bandera": "pe",
+            "compra": 3.74,
+            "venta": 3.74,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "config_null_y_config_vacio",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Config",
+        "moneda_base": "USDT",
+        "monedas": {
+          "COP": null,
+          "EUR": {},
+          "PEN": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 1,
+              "pago": 1
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T120",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio Config",
+        "moneda_base": "USDT",
+        "lote_tasa": "T120",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "EUR",
+            "nombre_pais": "Europa",
+            "bandera": "eu",
+            "compra": 0.92,
+            "venta": 0.92,
+            "trend": "equal"
+          },
+          {
+            "code": "PEN",
+            "nombre_pais": "Peru",
+            "bandera": "pe",
+            "compra": 3.78,
+            "venta": 3.7,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "monedas_vacio",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Sin Monedas",
+        "moneda_base": "USDT",
+        "monedas": {}
+      },
+      "lote_actual": {
+        "id_tasa": "T130",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio Sin Monedas",
+        "moneda_base": "USDT",
+        "lote_tasa": "T130",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": []
+      }
+    },
+    {
+      "nombre": "sin_metadatos_usa_defaults",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Defaults",
+        "monedas": {
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio Defaults",
+        "moneda_base": "USDT",
+        "lote_tasa": "T000",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 4050,
+            "venta": 4050,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "moneda_base_en_minuscula",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Base Minuscula",
+        "moneda_base": "pen",
+        "monedas": {
+          "COP": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "PEN": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T150",
+        "tasas": {
+          "ARS": 1450.5,
+          "BOB": 6.96,
+          "BRL": 5.42,
+          "CAD": 1.36,
+          "CLP": 945,
+          "COP": 4050,
+          "CRC": 520,
+          "DOP": 58.5,
+          "ECU": 1,
+          "EUR": 0.92,
+          "MXN": 17.15,
+          "PAN": 1,
+          "PEN": 3.745,
+          "PYG": 7300,
+          "PYUSD": 1,
+          "USD": 1,
+          "USDT": 1,
+          "VES": 36.5
+        }
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio Base Minuscula",
+        "moneda_base": "pen",
+        "lote_tasa": "T150",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "COP",
+            "nombre_pais": "Colombia",
+            "bandera": "co",
+            "compra": 1081,
+            "venta": 1081,
+            "trend": "equal"
+          },
+          {
+            "code": "PEN",
+            "nombre_pais": "Peru",
+            "bandera": "pe",
+            "compra": 1,
+            "venta": 1,
+            "trend": "equal"
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "moneda_fuera_de_catalogo",
+      "instante_millis": 1781496300000,
+      "perfil": {
+        "nombre": "Socio Exotico",
+        "moneda_base": "USDT",
+        "monedas": {
+          "XAU": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          },
+          "ZZZ": {
+            "activo": true,
+            "porcentaje": {
+              "deposito": 0,
+              "pago": 0
+            }
+          }
+        }
+      },
+      "lote_actual": {
+        "id_tasa": "T140",
+        "tasas": {
+          "XAU": 2400.5,
+          "ZZZ": 2
+        }
+      },
+      "lote_anterior": null,
+      "esperado": {
+        "nombre_socio": "Socio Exotico",
+        "moneda_base": "USDT",
+        "lote_tasa": "T140",
+        "fecha_actualizacion": "15-jun",
+        "hora_actualizacion": "00:05",
+        "tarjetas_paises": [
+          {
+            "code": "XAU",
+            "nombre_pais": "XAU",
+            "bandera": "us",
+            "compra": 2400,
+            "venta": 2400,
+            "trend": "equal"
+          },
+          {
+            "code": "ZZZ",
+            "nombre_pais": "ZZZ",
+            "bandera": "us",
+            "compra": 2,
+            "venta": 2,
+            "trend": "equal"
+          }
+        ]
+      }
+    }
+  ],
+  "precision": [
+    {
+      "entrada": 0,
+      "esperado": 0
+    },
+    {
+      "entrada": 0.5,
+      "esperado": 0.5
+    },
+    {
+      "entrada": -0.5,
+      "esperado": -0.5
+    },
+    {
+      "entrada": 1e-9,
+      "esperado": null
+    },
+    {
+      "entrada": 1.5e-8,
+      "esperado": 1.1e-7
+    },
+    {
+      "entrada": 1e-8,
+      "esperado": 1.1e-7
+    },
+    {
+      "entrada": 9e-8,
+      "esperado": 1.899e-7
+    },
+    {
+      "entrada": 1e-7,
+      "esperado": 2e-7
+    },
+    {
+      "entrada": 0.00012345678,
+      "esperado": 0.000123
+    },
+    {
+      "entrada": 0.0099999999,
+      "esperado": 0.01
+    },
+    {
+      "entrada": 0.01,
+      "esperado": 0.01
+    },
+    {
+      "entrada": 0.099999999,
+      "esperado": 0.1
+    },
+    {
+      "entrada": 0.1,
+      "esperado": 0.1
+    },
+    {
+      "entrada": 0.2456,
+      "esperado": 0.245
+    },
+    {
+      "entrada": 0.99999999,
+      "esperado": 1
+    },
+    {
+      "entrada": 1.00000001,
+      "esperado": 1
+    },
+    {
+      "entrada": 2.5,
+      "esperado": 2.5
+    },
+    {
+      "entrada": 3.7489999999999997,
+      "esperado": 3.74
+    },
+    {
+      "entrada": 9.99,
+      "esperado": 9.99
+    },
+    {
+      "entrada": 9.995,
+      "esperado": 9.99
+    },
+    {
+      "entrada": 9.999,
+      "esperado": 9.99
+    },
+    {
+      "entrada": 9.9999,
+      "esperado": 9.99
+    },
+    {
+      "entrada": 9.999999999,
+      "esperado": 10
+    },
+    {
+      "entrada": 10,
+      "esperado": 10
+    },
+    {
+      "entrada": 10.001,
+      "esperado": 10
+    },
+    {
+      "entrada": 10.004999999,
+      "esperado": 10
+    },
+    {
+      "entrada": 12.3456,
+      "esperado": 12.34
+    },
+    {
+      "entrada": 99.99,
+      "esperado": 99.99
+    },
+    {
+      "entrada": 99.995,
+      "esperado": 99
+    },
+    {
+      "entrada": 99.999999,
+      "esperado": 99
+    },
+    {
+      "entrada": 100,
+      "esperado": 100
+    },
+    {
+      "entrada": 100.5,
+      "esperado": 100
+    },
+    {
+      "entrada": 1234.5678,
+      "esperado": 1234
+    },
+    {
+      "entrada": 4050.505,
+      "esperado": 4050
+    },
+    {
+      "entrada": 7300.0000001,
+      "esperado": 7300
+    },
+    {
+      "entrada": -123.4567,
+      "esperado": -123
+    },
+    {
+      "entrada": -99.995,
+      "esperado": -99
+    }
+  ],
+  "tiempo": [
+    {
+      "millis": 1768478400000,
+      "fecha": "15-ene",
+      "hora": "08:00"
+    },
+    {
+      "millis": 1771156800000,
+      "fecha": "15-feb",
+      "hora": "08:00"
+    },
+    {
+      "millis": 1772323800000,
+      "fecha": "28-feb",
+      "hora": "20:10"
+    },
+    {
+      "millis": 1776254400000,
+      "fecha": "15-abr",
+      "hora": "08:00"
+    },
+    {
+      "millis": 1778846400000,
+      "fecha": "15-may",
+      "hora": "08:00"
+    },
+    {
+      "millis": 1781496300000,
+      "fecha": "15-jun",
+      "hora": "00:05"
+    },
+    {
+      "millis": 1784116800000,
+      "fecha": "15-jul",
+      "hora": "08:00"
+    },
+    {
+      "millis": 1786795200000,
+      "fecha": "15-ago",
+      "hora": "08:00"
+    },
+    {
+      "millis": 1789473600000,
+      "fecha": "15-sept",
+      "hora": "08:00"
+    },
+    {
+      "millis": 1792290900000,
+      "fecha": "17-oct",
+      "hora": "22:35"
+    },
+    {
+      "millis": 1794744000000,
+      "fecha": "15-nov",
+      "hora": "08:00"
+    },
+    {
+      "millis": 1798761540000,
+      "fecha": "31-dic",
+      "hora": "19:59"
+    },
+    {
+      "millis": 1767240000000,
+      "fecha": "01-ene",
+      "hora": "00:00"
+    }
+  ]
+}
