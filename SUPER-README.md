@@ -4,9 +4,9 @@ Documento maestro de arquitectura, operación y contratos del monolito modular *
 
 | Campo | Valor |
 |---|---|
-| Versión | 0.2.0 (configuración y logging) |
+| Versión | 0.3.0 (persistencia) |
 | Fecha | 2026-10-20 |
-| Estado | Fase 2 — `platform/config` y `platform/logging` |
+| Estado | Fase 3 — `platform/postgres` y health |
 | Módulo | `glauk` |
 | API | `v1` |
 | Fuente normativa | `../PLAN_CONSOLIDACION_GLAUK.md` |
@@ -211,7 +211,83 @@ Matriz completa de rutas, alias, envelopes, códigos de error, OpenAPI y políti
 
 ## 12. Base de datos
 
-Tablas, ownership, columnas, JSONB, índices, migraciones, consultas de auditoría y backup/restore.
+> Fase 3 implementada: pool único, ping de arranque, `statement_timeout` y transacciones seguras. El catálogo completo de tablas, ownership, JSONB, índices, migraciones y backup/restore se completa en las fases de dominio.
+
+### 12.1 Pool único y ownership
+
+- El proceso crea **un solo** `*pgxpool.Pool` en `cmd/server` mediante `postgres.New(ctx, cfg.DB)` y lo inyecta por constructor.
+- Ningún paquete de dominio construye pools, usa `pgx.Conn` suelto ni `database/sql`. Los repositorios reciben el pool; los servicios no lo conocen.
+- No hay `var db *pgxpool.Pool`, `init()` con efectos ni estado global mutable.
+- El pool se cierra una sola vez durante el apagado ordenado, después de dejar de aceptar peticiones.
+
+`postgres.New` aplica esta política:
+
+| Parámetro | Origen / valor | Efecto |
+|---|---|---|
+| `MaxConns` | `DB_MAX_CONNS` | Tope de conexiones del proceso. |
+| `MinConns` | `DB_MIN_CONNS` | Mínimo que el pool intenta mantener; 0 es válido. |
+| `MaxConnLifetime` | `DB_CONN_MAX_LIFETIME` | Reciclaje de conexiones. |
+| `MaxConnIdleTime` | `DB_CONN_MAX_IDLE_TIME` | Cierre de conexiones ociosas. |
+| `HealthCheckPeriod` | fijo `30s` | Frecuencia de revisión del pool. |
+| `ConnectTimeout` | `DB_CONNECT_TIMEOUT` | Cota del ping inicial y de cada intento de conexión. |
+| `application_name` | fijo `glauk` | Identificación en `pg_stat_activity`. |
+| `statement_timeout` | `DB_STATEMENT_TIMEOUT` en ms | Límite aplicado por el servidor PostgreSQL. |
+
+**Fail-fast:** `New` valida los parámetros, parsea el DSN con `pgxpool.ParseConfig`, crea el pool y ejecuta un `Ping` obligatorio acotado por `DB_CONNECT_TIMEOUT`. Si el parseo, la configuración o el ping fallan, cierra el pool y devuelve error antes de aceptar tráfico. Un error de credenciales no puede convertirse en un `500` en la primera petición de un usuario.
+
+Los errores de parseo no reproducen el DSN ni la contraseña. La precedencia `DATABASE_URL` → `DB_*` se define en el Capítulo 5.
+
+### 12.2 Timeouts de sentencia
+
+`statement_timeout` se envía como `RuntimeParams["statement_timeout"]` en milisegundos; por ejemplo, `DB_STATEMENT_TIMEOUT=10s` se traduce a `"10000"`. Se aplica en el servidor y no depende del cliente.
+
+Además, cada consulta recibe el `context.Context` heredado del request (`c.UserContext()`), que ya tiene deadline. El timeout del servidor protege contra consultas olvidadas; el contexto del request permite cancelar antes y liberar la conexión. No se permite `0`: el mínimo validado es `1ms`.
+
+### 12.3 Transaccionalidad
+
+Toda escritura de más de una sentencia usa `postgres.WithTx`. Las lecturas no abren transacción explícita.
+
+```go
+err := postgres.WithTx(ctx, pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+    // todas las sentencias de la unidad de trabajo
+    return nil
+})
+```
+
+Garantías:
+
+1. `BeginTx` recibe las `pgx.TxOptions` del llamador.
+2. Si `fn` devuelve error, se ejecuta `Rollback` y se propaga el error original.
+3. Si `fn` entra en pánico, se ejecuta `Rollback`, se libera la transacción y el pánico se vuelve a lanzar.
+4. El rollback usa `context.WithoutCancel` con una cota propia de 5 s: un request cancelado no deja la transacción abierta.
+5. Tras un `Commit` exitoso, el `Rollback` diferido devuelve `pgx.ErrTxClosed`; se ignora a propósito.
+6. Si `Commit` falla, se intenta rollback y se devuelve el error de commit.
+7. Ningún repositorio hace commit, rollback ni deja transacciones abiertas por su cuenta.
+8. No se usan transacciones anidadas ni `context.Background()` dentro de repositorios.
+
+### 12.4 Health
+
+`postgres.Ping(ctx, pool, timeout)` deriva un contexto con timeout y ejecuta `pool.Ping`. El handler `/health` lo consumirá con un timeout corto (2 s) y devolverá `200` si la base responde o `503` si no. La respuesta solo expone `database.status`; nunca incluye DSN, usuario, contraseña, host interno ni rutas del sistema. `/ready` mantiene el mismo criterio sin revelar la instancia.
+
+### 12.5 Verificación
+
+```powershell
+$env:CGO_ENABLED = "1"   # -race requiere cgo y gcc en PATH
+go test ./internal/platform/postgres -race -v
+```
+
+Casos cubiertos:
+
+- Tuning del pool y `RuntimeParams` (`application_name`, `statement_timeout`).
+- Rechazo de timeouts no positivos, `MaxConns` inválido y `MinConns > MaxConns`.
+- DSN inválido sin filtrar credenciales.
+- Fallo rápido con base inalcanzable, dentro de `DB_CONNECT_TIMEOUT`.
+- `WithTx`: commit, rollback por error, rollback por pánico, fallo de `BeginTx` y pool nil.
+- `Ping`: deadline acotado y rechazo de timeout no positivo.
+
+### 12.6 Catálogo pendiente
+
+Las tablas, columnas, JSONB `monedas`/`mostrar`, ownership por dominio, índices, migraciones idempotentes, consultas de auditoría y backup/restore se documentan al implementar cada dominio. Regla vigente: `reportes` no ejecuta SQL; solo consume puertos de los demás dominios.
 
 ## 13. Seguridad
 
