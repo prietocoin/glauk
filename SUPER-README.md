@@ -272,13 +272,207 @@ Casos cubiertos:
 
 Los detalles de generación de carteleras, JPG, idempotencia de reportes y endpoints de dominio se completan en las fases de Reportes.
 
-## 10. Frontends
+## 10. Frontends y routing estático
 
-Estructura de cada panel, módulos, service workers, CSP, canvas, despliegue y convenciones JS/CSS.
+> Fase 5 implementada: `internal/platform/httpx` resuelve host/prefijo, sirve assets con caché diferenciada y aplica el SPA fallback. Los shells reales de cada panel se incorporan en las fases de frontend; el contrato de aislamiento ya está activo.
 
-## 11. Rutas y contratos
+### 10.1 Tabla de tenants
 
-Matriz completa de rutas, alias, envelopes, códigos de error, OpenAPI y política de deprecación.
+| Tenant | Hosts por defecto | Prefijo path | Shell | API que consume |
+|---|---|---|---|---|
+| `tasas` | `tasas.localhost` | `/tasas` | `public/tasas/index.html` | `/api/v1/tasas/*` |
+| `perfiles` | `perfiles.localhost` | `/perfiles` | `public/perfiles/index.html` | `/api/v1/perfiles/*` |
+| `comprobantes` | `comprobantes.localhost` | `/comprobantes` | `public/comprobantes/index.html` | `/api/v1/comprobantes/*`, `/api/v1/reportes/*` |
+| `reportes` | `reportes.localhost` | `/reportes` | `public/reportes/index.html` | `/api/v1/reportes/*` |
+
+Los hosts reales se configuran con `TENANT_*_HOSTS` (CSV, sin puerto). Se admite un wildcard de un solo nivel: `*.glauk.com` coincide con `tasas.glauk.com` pero no con `a.b.glauk.com`.
+
+### 10.2 Resolución
+
+1. Si `TRUSTED_PROXY_HEADER` está configurado, se usa el primer valor de esa cabecera (`X-Forwarded-Host`) en lugar de `Host`.
+2. Se quita el puerto, se normaliza a minúsculas y se compara con `TENANT_*_HOSTS`.
+3. Un match de host gana y no se evalúa el path.
+4. `HOST_ROUTING_MODE=host`: un host desconocido responde `404`, incluso en `/`; nunca sirve el panel de otro tenant.
+5. Sin match de host, se prueba el primer segmento del path contra `/tasas`, `/perfiles`, `/comprobantes` y `/reportes`.
+6. Si no hay match y la ruta es `/` o el fallback SPA, se usa `DEFAULT_TENANT`.
+7. `DEFAULT_TENANT=none` sirve `public/index.html` solo en `/`; el resto responde `404`.
+8. `HOST_ROUTING_MODE=path` ignora los hosts; `host` ignora los prefijos; `both` acepta ambos y el host tiene prioridad.
+
+### 10.3 Precedencia de rutas
+
+```text
+1. /health, /ready
+2. API canónica /api/v1/*
+3. Alias legacy específicos y generales
+4. /api y /api/* desconocidos -> 404 JSON (nunca SPA)
+5. /robots.txt y /favicon.ico
+6. Assets compartidos /shared/*
+7. Assets del tenant (con o sin hash)
+8. SPA fallback del tenant para rutas sin extensión
+9. 404 global
+```
+
+`RegisterStatic` se invoca después de registrar toda la API. Instala el guard de `/api` antes del handler estático, por lo que una ruta de API desconocida no puede caer al `index.html`.
+
+### 10.4 Reglas de servido y caché
+
+| Ruta | Respuesta | `Cache-Control` |
+|---|---|---|
+| `GET /` con host tenant | `index.html` del tenant | `no-cache` |
+| `GET /` sin match, `DEFAULT_TENANT=comprobantes` | Shell del tenant por defecto | `no-cache` |
+| `GET /` sin match, `DEFAULT_TENANT=none` | `public/index.html` (lanzador) | `no-cache` |
+| `GET /tasas/` | `public/tasas/index.html` | `no-cache` |
+| `GET /tasas/main.a1b2c3d4.js` | Asset con hash | `public, max-age=31536000, immutable` |
+| `GET /tasas/main.js` | Asset sin hash | `no-cache` |
+| `GET /shared/js/http.js` | Asset compartido | `public, max-age=3600` |
+| `GET /manifest.json`, `/sw.js` | Del tenant | `no-cache` |
+| `GET /api/inexistente` | Envelope `NOT_FOUND` | `no-store` |
+| `GET /assets/..%2f..%2fetc/passwd` | Envelope `FORBIDDEN` | `no-store` |
+| `GET /ruta-sin-extension` | `index.html` del tenant | `no-cache` |
+| `GET /ruta.js` inexistente | Envelope `NOT_FOUND` | `no-store` |
+
+### 10.5 Aislamiento y seguridad
+
+- **Anti-traversal:** se inspeccionan `OriginalURL` y `Path`, se decodifica `%2e%2e`, y se rechazan segmentos `..`, barras invertidas y bytes NUL con `403 FORBIDDEN`.
+- Después de `filepath.Clean`, `filepath.Rel` verifica que el archivo resuelto permanezca dentro de `PUBLIC_DIR/<tenant>` o `PUBLIC_DIR/shared`.
+- Un asset inexistente **con extensión** responde `404`; nunca se sustituye por el SPA. Una ruta sin extensión sí usa el `index.html` del tenant.
+- `index.html` se sirve con CSP de paneles (`default-src 'self'`, `img-src 'self' data: blob:`, `style-src 'self' 'unsafe-inline'`). La API no recibe CSP porque no devuelve HTML.
+- Todos los paneles usan rutas relativas para que el mismo shell funcione en host y en path.
+- El service worker se registra con el scope del tenant y **no** intercepta `/api/`; las mutaciones y los reportes nunca quedan atrapados offline.
+- `/shared/*` es común a todos los paneles; los assets de cada tenant viven bajo `public/<tenant>/`.
+
+### 10.6 Verificación
+
+```powershell
+$env:CGO_ENABLED = "1"
+go test ./internal/platform/httpx -race -v
+```
+
+Cubre host routing, path routing, prioridad del host, `/api/*` en JSON, traversal con `403`, asset inexistente con `404`, SPA fallback y las cuatro políticas de caché.
+
+## 11. Rutas y contratos HTTP
+
+> Fase 5 implementada: envelopes, traducción de errores, request ID, cabeceras de seguridad y guards de API/admin. Las rutas de dominio se registran en las fases 6–12 manteniendo el orden normativo.
+
+### 11.1 Envelope canónico
+
+Éxito:
+
+```json
+{
+  "success": true,
+  "data": {},
+  "requestId": "9f2c1e7a4b8d4c1e"
+}
+```
+
+Error:
+
+```json
+{
+  "success": false,
+  "error": "mensaje legible para el operador",
+  "code": "CODIGO_ESTABLE",
+  "requestId": "9f2c1e7a4b8d4c1e"
+}
+```
+
+`Envelope` expone `success`, `data`, `error`, `code`, `message` y `requestId`. Los helpers son `OK`, `Created`, `Fail` y `FailCode`; `OKFlat` conserva los contratos legacy que leen campos en la raíz.
+
+### 11.2 Compatibilidad por dominio
+
+| Dominio | Éxito | Error |
+|---|---|---|
+| Tasas | `{success:true, ...campos}` plano (`OKFlat`) | `{success:false, error, code, requestId}` |
+| Perfiles | Array raíz o `{success:true, data}` | `{success:false, error, code, requestId}` |
+| Comprobantes | Array raíz o `APIResponse{success,message,data}` | `APIResponse{success:false,error}` + `code` |
+| Reportes canónico | `Envelope` | `Envelope` |
+| Reportes legacy | `{success,message,jid,remoteJid,data}` | `{success:false,error,code}` |
+| Admin | `{success,data}` | `{success:false,error,code,requestId}` |
+
+Los errores siempre usan el envelope canónico, aunque el endpoint de éxito conserve su forma histórica.
+
+### 11.3 Catálogo de errores
+
+| Código | HTTP | Significado |
+|---|---:|---|
+| `INVALID_JSON` | 400 | Cuerpo no parseable. |
+| `VALIDATION_ERROR` | 400 | Campo inválido. |
+| `DESTINO_REQUERIDO` | 400 | Falta `socio` y `remoteJid`. |
+| `IMAGEN_REQUERIDA` | 400 | Falta `base64`. |
+| `TEXTO_REQUERIDO` | 400 | Falta `texto`. |
+| `UNAUTHORIZED` | 401 | Clave inválida o ausente. |
+| `FORBIDDEN` | 403 | Ruta fuera de `PUBLIC_DIR` o tenant no permitido. |
+| `SOCIO_NO_ENCONTRADO` | 404 | Socio inexistente. |
+| `NOT_FOUND` | 404 | Recurso o ruta inexistente. |
+| `METHOD_NOT_ALLOWED` | 405 | Método no soportado. |
+| `CONFLICT` | 409 | Conflicto de estado. |
+| `IMAGEN_MUY_GRANDE` | 413 | Imagen mayor a `REPORT_IMAGE_MAX_BYTES`. |
+| `PAYLOAD_TOO_LARGE` | 413 | Cuerpo mayor a `BODY_LIMIT_BYTES`. |
+| `IMAGEN_FORMATO` | 415 | No es un JPEG válido. |
+| `IMAGEN_DIMENSIONES` | 422 | Dimensiones o píxeles fuera de rango. |
+| `JID_NO_DISPONIBLE` | 422 | Perfil sin JID. |
+| `JID_INVALIDO` | 422 | JID con formato inválido. |
+| `RATE_LIMITED` | 429 | Límite de envíos. |
+| `INTERNAL` | 500 | Error no controlado. El detalle se registra, nunca se devuelve. |
+| `EVOLUTION_UNAVAILABLE` | 502 | Evolution no responde o rechaza. |
+| `ADMIN_DISABLED` | 503 | `ADMIN_API_KEY` no configurada. |
+| `TIMEOUT` | 504 | Contexto o dependencia excedida. |
+
+`ErrorHandler` traduce `*HTTPError`, `*fiber.Error` y `context.DeadlineExceeded`. Cualquier error desconocido produce `500 INTERNAL` con el mensaje fijo `error interno del servidor`; la causa se registra con `request_id`, método y ruta.
+
+### 11.4 Request ID, seguridad y guards
+
+- `RequestID` acepta un UUID o ULID válido en `X-Request-Id`; si falta o es inválido genera 16 bytes criptográficos en hex. El valor se guarda en `Locals` y se devuelve en la respuesta.
+- `AccessLog` registra `request_id`, método, ruta, estado, duración, bytes y tenant. Nunca registra cuerpo, query con tokens, `X-API-Key`, `X-Admin-Key` ni credenciales.
+- `SecurityHeaders` aplica `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` y `Cross-Origin-Opener-Policy`; añade HSTS solo sobre HTTPS.
+- `RequireAPIKey` deja pasar si `SECURITY_API_KEY` está vacía (compatibilidad) y exige `X-API-Key` en tiempo constante si está definida.
+- `RequireAdminKey` responde `503 ADMIN_DISABLED` si `ADMIN_API_KEY` está vacía, `401 UNAUTHORIZED` si la clave es incorrecta y delega si es correcta. Acepta `X-Admin-Key` o la cookie `admin_key`.
+- `VerifyAdmin` usa exclusivamente `subtle.ConstantTimeCompare`; nunca registra la clave recibida.
+
+### 11.5 Orden de registro
+
+```text
+/health, /ready
+API canónica /api/v1/*
+alias legacy específicos
+alias legacy generales
+/api/v1/atenea/*
+/api y /api/* desconocidos -> 404 JSON
+assets estáticos (shared y tenant)
+SPA fallback del tenant
+404 global
+```
+
+El orden es parte del contrato. Un `404` de API nunca se delega al SPA, y el host tiene prioridad sobre el prefijo de path.
+
+### 11.6 Health y readiness
+
+```json
+{
+  "status": "ok",
+  "service": "glauk",
+  "version": "1.0.0",
+  "uptime_s": 1234,
+  "checks": {
+    "database": {"status": "ok", "latency_ms": 2},
+    "evolution": {"status": "simulated", "instance": "Glauk"}
+  }
+}
+```
+
+- `/health` devuelve `200` si la base responde y `503` si no. Incluye versión e instancia de Evolution.
+- `/ready` es equivalente pero omite `version` y la instancia; mantiene `database.status` y `evolution.status`.
+- Ambos son públicos, usan `Cache-Control: no-store` y nunca exponen DSN, usuario, contraseña, claves, rutas del sistema ni detalles internos del error.
+
+### 11.7 Verificación
+
+```powershell
+$env:CGO_ENABLED = "1"
+go test ./internal/platform/httpx -race -v
+```
+
+Casos cubiertos: mapeo de `HTTPError`, `fiber.Error` y timeout; ocultamiento de la causa en `500`; validación y generación de request IDs; admin deshabilitado, inválido y correcto; envelopes; health/ready; routing por host y path; `/api/*` JSON; traversal `403`; asset inexistente `404`; SPA fallback y caché.
 
 ## 12. Base de datos
 
@@ -338,7 +532,7 @@ Garantías:
 
 ### 12.4 Health
 
-`postgres.Ping(ctx, pool, timeout)` deriva un contexto con timeout y ejecuta `pool.Ping`. El handler `/health` lo consumirá con un timeout corto (2 s) y devolverá `200` si la base responde o `503` si no. La respuesta solo expone `database.status`; nunca incluye DSN, usuario, contraseña, host interno ni rutas del sistema. `/ready` mantiene el mismo criterio sin revelar la instancia.
+`postgres.Ping(ctx, pool, timeout)` deriva un contexto con timeout y ejecuta `pool.Ping`. `httpx.Health` lo consume con un timeout corto (`healthTimeout`, 2 s) y devuelve `200` si la base responde o `503` si no. La respuesta solo expone `database.status` y `latency_ms`; nunca incluye DSN, usuario, contraseña, host interno ni rutas del sistema. `/ready` mantiene el mismo criterio sin revelar la versión ni la instancia de Evolution.
 
 ### 12.5 Verificación
 
