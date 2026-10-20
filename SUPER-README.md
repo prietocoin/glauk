@@ -4,9 +4,9 @@ Documento maestro de arquitectura, operación y contratos del monolito modular *
 
 | Campo | Valor |
 |---|---|
-| Versión | 0.3.0 (persistencia) |
+| Versión | 0.4.0 (mensajería) |
 | Fecha | 2026-10-20 |
-| Estado | Fase 3 — `platform/postgres` y health |
+| Estado | Fase 4 — `platform/evolution` |
 | Módulo | `glauk` |
 | API | `v1` |
 | Fuente normativa | `../PLAN_CONSOLIDACION_GLAUK.md` |
@@ -199,7 +199,78 @@ Auditoría, snapshot congelado, reglas financieras, endpoints, consola admin, SQ
 
 ## 9. Dominio Reportes
 
-Puertos, flujo canvas/JPEG, validación, JID, idempotencia, rate limit, endpoints, ejemplos y límites.
+### 9.1 Cliente unificado de Evolution (`platform/evolution`)
+
+> Fase 4 implementada. Este paquete es el único adaptador de salida hacia Evolution API. No conoce JIDs, PostgreSQL ni reglas de dominio: recibe un `number` opaco y un payload ya validado por el dominio.
+
+Contrato:
+
+| Operación | Endpoint | Cuerpo |
+|---|---|---|
+| Media | `POST {EVOLUTION_API_URL}/message/sendMedia/{EVOLUTION_INSTANCE}` | `number`, `mediatype`, `mimetype`, `caption`, `media`, `fileName` opcional. |
+| Texto | `POST {EVOLUTION_API_URL}/message/sendText/{EVOLUTION_INSTANCE}` | `number`, `text`. |
+
+- `SendMedia` exige `number` y `media` no vacíos; `mediatype` y `mimetype` son opcionales y usan `image` y `image/jpeg` cuando faltan.
+- `SendText` exige `number` y `text` no vacíos.
+- No se valida ni normaliza el `number`: eso pertenece al dominio. El cliente no acepta JIDs ni consulta la base.
+- La única cabecera de autenticación es `apikey: <EVOLUTION_API_KEY>`. Nunca se envían `Authorization` ni `Global-Api-Key`.
+- `Content-Type: application/json`; el cuerpo se serializa una sola vez antes de los reintentos.
+- `EVOLUTION_TIMEOUT` se aplica con `http.Client.Timeout` y además mediante el `context.Context` del request.
+
+Recibo:
+
+- `Receipt.Status` es `SENT` por defecto. Si Evolution devuelve `status`, se conserva.
+- `Receipt.MessageID` se extrae de `key.id`; también se aceptan `messageId` o `id` de nivel superior para variantes de versión.
+- `Receipt.Raw` conserva una copia del cuerpo recibido, con la clave redactada si apareciera.
+- Un `200` con cuerpo vacío, `null` o no JSON no es error: devuelve `Status: "SENT"` y `MessageID` vacío.
+
+### 9.2 Reintentos y errores
+
+| Condición | ¿Reintenta? | Espera |
+|---|---|---|
+| Error de red o timeout | Sí | Exponencial con jitter ±20 %. |
+| `408`, `425`, `429` | Sí | Exponencial; `Retry-After` tiene prioridad. |
+| `500`, `502`, `503`, `504` y demás `5xx` | Sí | Exponencial con jitter ±20 %. |
+| `400`, `401`, `403`, `404`, `422` | No | Error inmediato. |
+| Contexto cancelado | No | Se devuelve `ctx.Err()` sin esperar el backoff. |
+
+- `EVOLUTION_MAX_RETRIES` es el número de reintentos después del primer intento; por defecto `2`.
+- `EVOLUTION_RETRY_BASE` es la base; por defecto `300ms`. Si el cliente recibe una base no positiva, usa `250ms`.
+- La espera exponencial es `base × 2^(attempt-1)`, con el exponente acotado para no desbordar.
+- El jitter multiplica el cálculo exponencial por un valor entre `0.8` y `1.2`.
+- `Retry-After` se interpreta en segundos y tiene prioridad sobre el cálculo exponencial.
+- Toda espera, incluido `Retry-After`, se corta en `5s` y es cancelable por el contexto.
+- Los cuerpos de respuesta se leen con un límite de `1 MiB`.
+- `APIError` expone `StatusCode`, `Body`, `Retryable` y `RetryAfter` (segundos). `Body` se recorta a 500 caracteres e incluye `...` cuando se truncó.
+- La `apikey` se elimina del cuerpo antes de construir `APIError`; nunca aparece en `err.Error()` ni en logs. El paquete no registra credenciales.
+
+### 9.3 Simulación
+
+La simulación se activa **únicamente** cuando `EVOLUTION_API_URL` queda vacía (`Client.Simulated() == true`). En ese modo no se abre ninguna conexión y la API key no se utiliza.
+
+- `Status` devuelto: `SIMULATED`.
+- `MessageID`: `sim-` + los primeros 8 bytes de `SHA-256(kind|number|content)` en hexadecimal.
+- El identificador es determinista para el mismo `kind`, `number` y contenido, lo que permite probar idempotencia y reintentos sin red.
+- En producción el arranque rechaza `EVOLUTION_API_URL` vacía; la simulación nunca puede activarse por accidente en ese entorno.
+
+### 9.4 Verificación
+
+```powershell
+$env:CGO_ENABLED = "1"   # -race requiere cgo y gcc en PATH
+go test ./internal/platform/evolution -race -v
+```
+
+Casos cubiertos:
+
+- `200` con `key.id` y `200` con cuerpo vacío o no estructurado.
+- `400/401/403/404/422` no reintentables y con cuerpo acotado.
+- `429` con `Retry-After`, reintento y espera respetada.
+- `408/425/500/502/503/504` reintentados hasta `MaxRetries`.
+- Timeout de contexto, cancelación durante el backoff y timeout de red.
+- Simulación sin red, determinista y con validación de campos mínimos.
+- La API key no aparece en el error aunque el servidor la refleje en el cuerpo.
+
+Los detalles de generación de carteleras, JPG, idempotencia de reportes y endpoints de dominio se completan en las fases de Reportes.
 
 ## 10. Frontends
 
