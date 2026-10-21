@@ -1296,7 +1296,138 @@ Docker, Easypanel, health, logs, métricas, escalado, rollback y ventanas de man
 
 ## 15. Pruebas y calidad
 
-Pirámide, matriz de tests, golden fixtures, contract tests, arquitectura, cobertura y CI.
+La calidad de Glauk se verifica con pruebas ejecutables y puertas de CI, no con revisión manual. Las puertas obligatorias son `gofmt`, `go vet`, `go test -race`, el presupuesto de líneas, el aislamiento arquitectónico, la matriz de rutas y los umbrales de cobertura de §6.3.
+
+### 15.1 Pirámide de pruebas
+
+| Nivel | Qué verifica | Implementación | Se ejecuta en CI |
+|---|---|---|---|
+| Unitario de dominio | Reglas financieras, polaridad, perfiles, filtros y estados. | `internal/comprobantes/calc`, `internal/comprobantes/domain`, `internal/tasas/calculator`, `internal/perfiles/model`. | Sí, con `go test`. |
+| Servicio y casos de uso | Orquestación, errores públicos, defaults y transacciones simuladas. | `internal/*/service`, `internal/*/store`. | Sí, con dobles y `pgxmock`. |
+| Contract test de adaptadores | Puertos de Reportes, Evolution y proyecciones entre dominios. | `internal/reportes/adapters`, `internal/platform/evolution`. | Sí, con fakes y `httptest`. |
+| HTTP y routing | Envelopes, códigos de error, aliases, guards y colisiones de rutas. | `internal/*/http`, `cmd/server`, `scripts/check-routes.ps1`. | Sí, con `app.Test`. |
+| Integración PostgreSQL | SQL, escaneo, transacciones y rollback. | `internal/*/store` con `pgxmock`; Postgres efímero para verificación manual. | Sí la parte mockeada. |
+| E2E manual del canvas | Pipeline de imagen y descarga en navegador. | Capítulo 10; fixtures JPEG y prueba manual por tenant. | No. |
+
+La cobertura por paquete es local: Go instrumenta el paquete cuyas pruebas se ejecutan, no los paquetes que lo consumen desde otro test. Por eso un handler puede aparecer cubierto por su prueba HTTP y no por la del dominio que lo llama.
+
+### 15.2 Matriz de pruebas
+
+| Área | Archivos principales | Casos clave |
+|---|---|---|
+| Configuración | `platform/config/config_test.go` | Precedencia, defaults, errores agregados, DSN y timeouts. |
+| Evolution | `platform/evolution/*_test.go` | 2xx, 4xx, 429, 5xx, timeout, reintentos, simulación y redacción de API key. |
+| HTTP compartido | `platform/httpx/*_test.go` | Envelopes, errores, health, estáticos, host/path y traversal. |
+| Postgres | `platform/postgres/*_test.go` | Pool, ping, timeouts, `WithTx`, commit, rollback y pánico. |
+| Tasas | `tasas/calculator/calculator_test.go`, `tasas/render/*_test.go`, `tasas/service/service_test.go`, `tasas/store/*_test.go`, `tasas/http/routes_test.go` | Golden de carteleras, triangulación, PNG, modo prueba, lotes, socios y aliases. |
+| Perfiles | `perfiles/model/*_test.go`, `perfiles/repo/*_test.go`, `perfiles/service/service_test.go`, `perfiles/http/routes_test.go` | Tres formas del codec `monedas`, round-trip, actividad H-02, defaults y rutas. |
+| Comprobantes | `comprobantes/calc/*_test.go`, `comprobantes/domain/domain_test.go`, `comprobantes/service/service_test.go`, `comprobantes/http/routes_test.go` | Snapshot congelado, D/A, polaridad, herencia, proyección, filtros y mutaciones. |
+| Reportes | `reportes/service_test.go`, `reportes/image_test.go`, `reportes/target_test.go`, `reportes/state_test.go`, `reportes/http/*_test.go`, `reportes/adapters/*_test.go` | Puertos, JPEG, JID, idempotencia, rate limit, aliases legacy, Evolution y arquitectura. |
+| Rutas del servidor | `cmd/server/routes_test.go`, `routes_aliases_test.go`, `routes_manifest_test.go` | Registro, alias, manifest y ausencia de colisiones. |
+
+### 15.3 Golden fixtures
+
+- **Tasas:** `internal/tasas/calculator/testdata/golden_calculator.json` se generó desde el servicio Node original con `testdata/gen_golden_calculator.mjs`. Congela 18 carteleras, 37 valores de precisión y 13 instantes horarios. `TestGolden` compara con tolerancia `1e-9` y `cmpopts.EquateEmpty`; la fuente de verdad es el comportamiento legacy, no el resultado actual.
+- **Comprobantes:** `internal/comprobantes/calc/snapshot_test.go` congela cinco casos: depósito estándar, abono en la misma moneda, polaridad negativa, herencia de FUNDDA y pago con spread. La comparación es exacta con `cmp.Diff`; `snapshot.go` exige un fixture nuevo ante cualquier cambio de regla.
+- **No se actualiza un fixture para que pase una prueba.** Primero se identifica si el cambio es una regla nueva deliberada; si lo es, se agrega el caso y se documenta. Si no, se corrige el código.
+
+Reproducir un fallo dorado:
+
+```powershell
+go test ./internal/tasas/calculator -run TestGolden -v
+go test ./internal/comprobantes/calc -run TestCalcularSnapshotFinancieroGolden -v
+```
+
+### 15.4 Arquitectura y presupuesto
+
+Además del test `internal/reportes/architecture_test.go`, que cierra los imports del dominio a la lista permitida, hay dos auditores de repositorio:
+
+```powershell
+.\scripts\check-file-length.ps1
+.\scripts\check-architecture.ps1
+.\scripts\check-routes.ps1
+```
+
+`check-file-length.ps1` evalúa todo `Core/` y falla si:
+
+| Tipo | Límite |
+|---|---|
+| Go de producción | 30 a 200 líneas; objetivo SRP 30 a 180. |
+| Go de pruebas (`*_test.go`) | Máximo 220 líneas. |
+| HTML | Máximo 180 líneas. |
+| JavaScript y CSS | Máximo 250 líneas, excluyendo `public/shared/vendor/`. |
+
+`check-architecture.ps1` falla con código 1 si detecta: imports de pgx, perfiles, comprobantes, tasas, Postgres o Evolution desde `reportes` raíz/http; lectura de entorno fuera de `platform/config`; construcción de `pgxpool` fuera de `cmd/server` o `platform/postgres`; escrituras a `perfiles_glaukov` fuera de `internal/perfiles`; imports de dominios desde `platform/*`; o SQL en el dominio `reportes` (los adaptadores están excluidos). Los tests no se escanean como producción.
+
+### 15.5 Cobertura
+
+Los umbrales de §6.3 se cumplen. La cobertura global es ponderada por sentencias: **2.520 de 3.476 = 72,5 %**. No se persigue 100 %; se priorizan las rutas financieras y los contratos públicos.
+
+| Paquete | Cobertura | Puerta |
+|---|---:|---|
+| `internal/reportes` | 95,7 % | ≥ 80 % ✅ |
+| `internal/reportes/http` | 88,0 % | Subárbol de Reportes ✅ |
+| `internal/reportes/adapters` | 96,4 % | Subárbol de Reportes ✅ |
+| `internal/tasas/calculator` | 94,8 % | ≥ 75 % ✅ |
+| `internal/comprobantes/calc` | 95,3 % | ≥ 75 % ✅ |
+| **Global** | **72,5 %** | **≥ 70 % ✅** |
+
+Cobertura obtenida por paquete:
+
+| Paquete | Sentencias | Cubiertas | % |
+|---|---:|---:|---:|
+| `glauk/cmd/server` | 290 | 154 | 53,1 |
+| `glauk/internal/comprobantes/calc` | 236 | 225 | 95,3 |
+| `glauk/internal/comprobantes/domain` | 48 | 48 | 100,0 |
+| `glauk/internal/comprobantes/dto` | 61 | 41 | 67,2 |
+| `glauk/internal/comprobantes/http` | 95 | 70 | 73,7 |
+| `glauk/internal/comprobantes/service` | 129 | 67 | 51,9 |
+| `glauk/internal/comprobantes/store` | 222 | 14 | 6,3 |
+| `glauk/internal/perfiles/http` | 56 | 44 | 78,6 |
+| `glauk/internal/perfiles/model` | 120 | 109 | 90,8 |
+| `glauk/internal/perfiles/repo` | 116 | 86 | 74,1 |
+| `glauk/internal/perfiles/service` | 69 | 52 | 75,4 |
+| `glauk/internal/platform/config` | 273 | 194 | 71,1 |
+| `glauk/internal/platform/evolution` | 133 | 118 | 88,7 |
+| `glauk/internal/platform/httpx` | 301 | 240 | 79,7 |
+| `glauk/internal/platform/logging` | 39 | 37 | 94,9 |
+| `glauk/internal/platform/postgres` | 65 | 56 | 86,2 |
+| `glauk/internal/reportes` | 207 | 198 | 95,7 |
+| `glauk/internal/reportes/adapters` | 56 | 54 | 96,4 |
+| `glauk/internal/reportes/http` | 133 | 117 | 88,0 |
+| `glauk/internal/tasas/calculator` | 96 | 91 | 94,8 |
+| `glauk/internal/tasas/hoo` | 46 | 42 | 91,3 |
+| `glauk/internal/tasas/http` | 111 | 75 | 67,6 |
+| `glauk/internal/tasas/render` | 266 | 237 | 89,1 |
+| `glauk/internal/tasas/service` | 184 | 59 | 32,1 |
+| `glauk/internal/tasas/store` | 124 | 92 | 74,2 |
+
+`internal/tasas/domain` no tiene archivos de prueba propios; se ejercita a través de `calculator` y `store`. Los paquetes sin umbral específico no bloquean la fase, pero cualquier nueva ruta crítica debe añadir pruebas en su propio paquete para que la cobertura local no dependa de otro binario de test.
+
+### 15.6 Comandos de verificación
+
+Ejecutar desde `Core/`:
+
+```powershell
+gofmt -l .
+go vet ./...
+.\scripts\check-file-length.ps1
+.\scripts\check-architecture.ps1
+.\scripts\check-routes.ps1
+go test ./... -race -count=1
+go test ./... -coverprofile coverage.out
+go tool cover -func coverage.out
+```
+
+En Windows, `-race` requiere `CGO_ENABLED=1` y un compilador GCC disponible en `PATH`; el repositorio no versiona ese compilador. `coverage.out` está ignorado por Git. Para revisar un paquete concreto:
+
+```powershell
+go test ./internal/reportes -cover
+go test ./internal/comprobantes/calc -cover
+go test ./internal/tasas/calculator -cover
+```
+
+La fase se considera verde solo si la batería de CI termina con código 0, los umbrales de §15.5 se mantienen y el árbol de trabajo queda limpio después de eliminar artefactos temporales.
 
 ## 16. Runbook de incidentes
 
