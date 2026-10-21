@@ -4,18 +4,26 @@ Documento maestro de arquitectura, operación y contratos del monolito modular *
 
 | Campo | Valor |
 |---|---|
-| Versión | 0.4.0 (mensajería) |
-| Fecha | 2026-10-20 |
-| Estado | Fase 4 — `platform/evolution` |
+| Versión | 1.0.0 (producción) |
+| Fecha | 2026-10-21 |
+| Estado | Fase 16 — release `v1.0.0` |
 | Módulo | `glauk` |
 | API | `v1` |
+| Tag | `v1.0.0` / `f16-cleanup` |
 | Fuente normativa | `../PLAN_CONSOLIDACION_GLAUK.md` |
 
-> Este documento se completa de forma incremental en cada fase del runbook. Los títulos siguientes son el índice maestro normativo; ninguna sección se considera cerrada hasta cumplir sus puertas de calidad.
+> Documento maestro de la versión 1.0.0. Describe el estado implementado, no un diseño futuro. Los capítulos 18–20 cierran la documentación operativa; los ADRs y el glosario se conservan en los apéndices.
 
 ## 1. Portada y estado del proyecto
 
-Versión, fecha, commit, alcance, licencia, autoría, enlaces a ADRs y al plan de consolidación.
+Glauk es un monolito modular en Go que consolida **Tasas**, **Perfiles**, **Comprobantes** y **Reportes** en un solo binario, un solo contenedor y una sola base PostgreSQL. La versión 1.0.0 es la release de cutover: mantiene 64 alias de compatibilidad, aplica una migración aditiva para el borrado lógico de impactos y sustituye los servicios legados por el módulo unificado.
+
+- **Alcance:** API canónica `/api/v1/*`, paneles Tasas/Perfiles/Comprobantes, generación de reportes en canvas, envío por Evolution, migraciones y runbook de cutover.
+- **Runtime:** imagen distroless `static-debian12:nonroot`, binario estático, sin shell, sin Redis, sin BullMQ y sin Chromium.
+- **Calidad:** presupuesto de líneas, arquitectura hexagonal de Reportes, pruebas de contrato, alias con fecha de retiro y documentación sincronizada.
+- **Compatibilidad:** los alias responden con `Deprecation: true`, `Sunset: Sat, 31 Dec 2027 23:59:59 GMT` y un enlace al sucesor; `/api/tasas/n8n-webhook` responde `410 ROUTE_REMOVED`.
+- **Documentación relacionada:** [CHANGELOG.md](CHANGELOG.md), [migrations/README.md](migrations/README.md), [docs/openapi.yaml](docs/openapi.yaml) y el plan normativo `../PLAN_CONSOLIDACION_GLAUK.md`.
+- **Estado de los módulos legados:** `Tasas/`, `Perfiles/` y `Comprobantes/` quedan deprecados; el mantenimiento futuro se realiza exclusivamente en este repositorio. Ver los `DEPRECATED.md` en cada carpeta de origen.
 
 ## 2. Índice y convenciones
 
@@ -1288,7 +1296,7 @@ Las tablas, columnas, JSONB `monedas`/`mostrar`, ownership por dominio, índices
 
 ## 13. Seguridad
 
-Autenticación, CORS, headers, rate limit, secretos, amenazas, checklist de despliegue y respuesta a incidentes.
+La seguridad operativa y el hardening se detallan en el **Capítulo 19**. En resumen: admin protegido por `ADMIN_API_KEY`, mutaciones opcionalmente protegidas por `SECURITY_API_KEY`, comparación en tiempo constante, CORS restringido, cabeceras de seguridad, límites de body/imagen, rate limit, idempotencia, secretos fuera de la imagen y runtime distroless nonroot. El checklist de despliegue y la respuesta a fuga de claves están en §19.9 y §19.10.
 
 ## 14. Operación
 
@@ -1609,7 +1617,16 @@ La fase se considera verde solo si la batería de CI termina con código 0, los 
 
 ## 16. Runbook de incidentes
 
-Evolution caída, base lenta, JID inválido, imagen rechazada, doble envío y fuga de secreto.
+| Incidente | Primer control | Escalado |
+|---|---|---|
+| Evolution caída o 502 | Verificar `EVOLUTION_API_URL`, clave e instancia; ejecutar `evoprobe`. | Si el proveedor está caído, pausar envíos y comunicar; no reintentar en bucle. |
+| Base lenta o `/ready` 503 | Revisar `checks.database.latency_ms`, pool y consultas activas. | Aplicar el plan de recuperación de PostgreSQL y validar backup antes de reiniciar. |
+| JID inválido o placeholder | Confirmar el perfil y el valor `id_grupo`; no inventar un número. | Corregir en Perfiles y reenviar con una nueva clave de idempotencia. |
+| Imagen rechazada | Revisar firma JPEG, MIME, dimensiones y tamaño. | Regenerar desde el canvas; no relajar límites sin análisis de memoria. |
+| Doble envío | Revisar `Idempotency-Key`, `duplicate` y `messageId`. | Si se duplicó, registrar el incidente y evitar reintentos manuales. |
+| Fuga de secreto | Rotar la clave y reiniciar; revisar `401`/`403`. | Invalidar la clave vieja, conservar evidencia y abrir incidente. |
+
+El detalle de diagnóstico, mensajes y acciones está en §20.2; la respuesta específica a una fuga de clave está en §19.10.
 
 ## 17. Migración y compatibilidad
 
@@ -1619,14 +1636,14 @@ Glauk se incorpora sobre datos heredados sin una migración masiva ni destructiv
 
 | Elemento | Estado en el cutover |
 |---|---|
-| Código | Un solo módulo Go y un solo binario; las fases 1–15 están ejecutadas y la limpieza de la fase 16 queda pendiente. |
-| Tag de fase | `f15-cutover`. |
+| Código | Un solo módulo Go y un solo binario; las fases 1–16 están ejecutadas y la release es `v1.0.0`. Los módulos legados quedan deprecados y no reciben mantenimiento. |
+| Tag de fase | `v1.0.0` (y `f16-cleanup`); el tag histórico `f15-cutover` se conserva. |
 | Rutas | Las rutas canónicas y sus alias están documentados en el Capítulo 11; los alias se retiran después de 30 días sin uso, no durante el cutover. |
 | Base de datos | `internal/comprobantes/migrations/0001_impactos_soft_delete.sql` es la única migración de referencia. Es idempotente y no borra filas. |
 | Migraciones automáticas | **No existen**. El binario no aplica DDL al arrancar; el operador ejecuta `psql` con backup verificado. |
 | `monedas` | El codec acepta las tres formas y escribe el superset en la primera escritura de cada socio; no se reescribe masivamente en fase 1. |
 | `id_grupo` | El placeholder `NOMBRE_JID` está prohibido; el default nuevo es vacío y Reportes rechaza JIDs inválidos antes de enviar. |
-| `old/` y `pgxmock` | `old/` se archiva en la fase 16, no se borra durante el cutover. `pgxmock` sigue mientras la suite no use exclusivamente PostgreSQL efímero. |
+| `old/` y `pgxmock` | `old/` de los repositorios legados se conserva como referencia de rollback y no se despliega; el mantenimiento vive solo en `Core/`. `pgxmock` sigue mientras la suite no use exclusivamente PostgreSQL efímero. |
 
 Índice de migraciones y comandos: [`migrations/README.md`](migrations/README.md).
 
@@ -1706,14 +1723,443 @@ El objetivo es DNS en menos de 15 minutos, imagen anterior en menos de 10 minuto
 - No ejecutar migraciones destructivas sin backup verificado y prueba de restauración en staging.
 - No retirar los servicios viejos el mismo día: siete días de lectura y 72 horas de métricas son la red de seguridad.
 
-## 18. ADRs
+## 18. Monitoreo, métricas y observabilidad
 
-Índice y resumen de las seis decisiones; enlaces a `docs/adr/*.md`.
+Glauk no incorpora Prometheus, OpenTelemetry ni un agente externo en la versión 1.0.0. La observabilidad se apoya en tres fuentes que ya forman parte del binario: las sondas HTTP, los logs estructurados de `slog` y la auditoría persistente de las tablas de negocio. Esta decisión mantiene la imagen distroless pequeña y evita una dependencia operativa que todavía no aporta valor con una sola réplica.
 
-## 19. Glosario
+### 18.1 Sondas `/health` y `/ready`
 
-Socio, perfil, lote, cartelera, snapshot, JID, instancia, tenant, envelope y puerto.
+| Sonda | Contrato | Código | Uso |
+|---|---|---|---|
+| `GET /health` | `status`, `service:"glauk"`, `checks.database.status`, `checks.database.latency_ms`, `checks.evolution.status`, `checks.evolution.instance`, `uptime_s` y `version`. | `200` si PostgreSQL responde; `503` con `status:"degraded"` y `checks.database.status:"error"` si falla. | Sonda operativa completa y healthcheck de Easypanel. |
+| `GET /ready` | `status`, `service`, `checks.database`, `checks.evolution.status` (sin `instance`) y `uptime_s`. No incluye `version`. | `200` solo cuando PostgreSQL responde; `503` en caso contrario. | Decidir si el proxy puede enviar tráfico. |
+
+Ambas rutas:
+
+- Ejecutan el ping a PostgreSQL con un timeout máximo de **2 segundos** (`healthTimeout`).
+- Devuelven `Cache-Control: no-store`; el resultado nunca se cachea.
+- Exponen únicamente estado, latencia, modo de Evolution y, en `/health`, la versión; nunca DSN, usuario, contraseña, host interno ni rutas del sistema.
+- Se registran antes de las rutas de dominio y son públicas: no requieren `X-API-Key` ni `X-Admin-Key`.
+
+Ejemplos:
+
+```powershell
+Invoke-RestMethod http://localhost:3000/health | ConvertTo-Json -Depth 5
+Invoke-RestMethod http://localhost:3000/ready  | ConvertTo-Json -Depth 5
+```
+
+Si `/health` devuelve 503:
+
+1. Revisar `checks.database.status` y `latency_ms`. Un `error` confirma que el ping falló; una latencia cercana a 2000 ms indica saturación del pool o de PostgreSQL.
+2. Verificar conectividad, credenciales y `DB_MAX_CONNS`. No reiniciar en bucle si la base está caída: el proceso puede estar sano pero degradado.
+3. Confirmar que PostgreSQL acepta conexiones y que no se agotó el pool por consultas lentas.
+4. Si solo `checks.evolution.status` es `simulated`, no es un fallo: `EVOLUTION_API_URL` está vacía y los envíos se simulan.
+5. Después de corregir, esperar `/ready` 200 antes de reabrir tráfico.
+
+### 18.2 Logs estructurados con `slog`
+
+`LOG_FORMAT` selecciona el handler: `json` en producción y `text` en desarrollo; `auto` elige JSON cuando `APP_ENV=production` y texto en el resto. `LOG_LEVEL` acepta `debug`, `info`, `warn` y `error`. El logger se construye una sola vez en `cmd/server` y se inyecta; el dominio no usa `slog.Default()`.
+
+Cada request produce una línea con nombre de evento `http_request` y los campos obligatorios de §2.8:
+
+| Campo | Origen | Ejemplo |
+|---|---|---|
+| `request_id` | Cabecera `X-Request-Id` validada (UUID/ULID) o ID hexadecimal de 16 bytes generado por el servidor. | `9f2c1e7a4b8d4c1e` |
+| `method` | Método HTTP. | `POST` |
+| `path` | Ruta sin query string. | `/api/v1/reportes/imagen` |
+| `status` | Código final, incluido el de un error controlado. | `502` |
+| `duration_ms` | Duración total en milisegundos. | `1840` |
+| `bytes` | Tamaño del cuerpo de respuesta. | `812345` |
+| `tenant` | Tenant resuelto por host o path; vacío si no aplica. | `reportes` |
+
+El nivel se deriva del estado: `2xx` → `info`, `4xx` → `warn`, `5xx` → `error`. El middleware **no** registra cuerpos, query strings, cabeceras, cookies, `Authorization`, `X-API-Key`, `X-Admin-Key`, base64, captions ni la API key de Evolution. Los errores 5xx se registran con `request_id`, método, ruta y causa; el cliente recibe un mensaje estable sin la causa interna.
+
+El `request_id` se devuelve en la cabecera `X-Request-Id` y permite correlacionar la respuesta del panel con la línea de log exacta. Conservarlo es el primer paso de cualquier incidente.
+
+### 18.3 Auditoría de eventos de negocio
+
+La auditoría de negocio no depende de un servicio externo. Vive en las tablas que ya son fuente de verdad y se correlaciona con el `request_id` del log HTTP:
+
+| Evento | Evidencia persistente | Qué permite reconstruir |
+|---|---|---|
+| Alta, edición, activación o plantilla de socio | `perfiles_glaukov` | Nombre, JID, `mostrar.tasas`, monedas y estado. |
+| Lote de tasas | `tasas_glaukov` (`id_tasa`, `tasas`, `created_at`) | Valores publicados y momento de vigencia. |
+| Cálculo o liquidación | `comprobantes_liq` y snapshot congelado | Tasas, polaridad, montos, herencia y lote asignado. |
+| Borrado lógico de comprobante | `impactos_raw.eliminado_en` | Evidencia cruda conservada fuera del listado. |
+| Cola y proyección | `cola_fb`, `comprobantes_fb`, `comprobantes_auditados_fb` | Estado del procesamiento y datos auditados. |
+| Envío de reporte | Respuesta con `messageId` y `request_id`; no hay tabla propia de envíos en v1.0.0. | Correlación con Evolution y con el request HTTP. |
+
+No se registra el base64, el caption completo, el cuerpo de un comprobante ni una API key. Si en el futuro se necesita retención histórica de envíos, se crea una tabla propia de Reportes (`reportes_envios`) con `request_id`, socio, JID hasheado, `message_id`, bytes, estado y fecha; Reportes no escribe en tablas de Comprobantes.
+
+### 18.4 Métricas mínimas y alertas
+
+Con una réplica, las métricas del proveedor, los logs y las sondas son suficientes:
+
+| Métrica | Cómo obtenerla | Umbral de atención |
+|---|---|---|
+| Disponibilidad | `/ready` 200/503 y healthcheck de Easypanel. | Cualquier 503 sostenido más de 2 minutos. |
+| Latencia HTTP | `duration_ms` de `http_request`. | p95 > 2 s en rutas de lectura o > 30 s en render/envío. |
+| Errores 5xx | Logs filtrados por `status` ≥ 500. | Aumento sostenido sobre la línea base o un 5xx nuevo reproducible. |
+| Latencia de PostgreSQL | `checks.database.latency_ms` y logs de error. | Cerca del timeout de 2 s. |
+| Envíos | Respuestas `messageId`, errores `EVOLUTION_UNAVAILABLE`, logs de Reportes. | Fallos repetidos o ausencia de `messageId`. |
+| Duplicados | `duplicate:true` en la respuesta de Reportes y repetición de `messageId`. | Cualquier duplicado real; revisar la clave de idempotencia. |
+| Reinicios | Estado de Easypanel o `docker ps`. | Más de un reinicio no planificado por hora. |
+| Tamaño de imagen | `docker image inspect glauk:local --format '{{.Size}}'`. | Crecimiento anómalo tras cambiar la base o dependencias. |
+| Uso de alias | `path` de `http_request` con prefijos `/api/` no canónicos. | Aumento de rutas con `Deprecation` próximo al `Sunset`. |
+
+Consultas útiles:
+
+```powershell
+docker compose logs -f glauk
+docker compose logs glauk | Select-String '"status":5'
+docker compose logs glauk | Select-String '"request_id":"9f2c1e7a4b8d4c1e"'
+docker compose logs glauk | Select-String '"path":"/api/v1/reportes'
+```
+
+En Easypanel, filtrar por `status`, `path` o `request_id` en el visor. Para un incidente, guardar la línea completa y el `request_id`; no pegar payloads ni JIDs completos en tickets públicos. La retención de logs la define la plataforma; se recomienda conservar al menos 30 días en caliente y 90 días en archivo, con acceso restringido.
+
+### 18.5 Diagnóstico rápido
+
+| Señal | Interpretación | Acción |
+|---|---|---|
+| `/health` 503, `/ready` 503 | PostgreSQL no responde. | Revisar base, credenciales, pool y red. No reiniciar en bucle. |
+| `/health` 200, `/ready` 200, Evolution `simulated` | Modo simulación activo. | Configurar `EVOLUTION_API_URL` y `EVOLUTION_API_KEY` si se espera envío real. |
+| `status:502` en `/api/v1/reportes/*` | Evolution no responde o rechaza. | Revisar URL, clave, instancia y `evoprobe`; no reintentar a ciegas. |
+| `status:401` en mutaciones | `SECURITY_API_KEY` configurada y cabecera ausente o incorrecta. | Enviar `X-API-Key`; rotar si se sospecha fuga. |
+| `status:503` en admin | `ADMIN_API_KEY` vacía. | Configurar el secreto y reiniciar el servicio. |
+| `status:404` en `/api/...` | Ruta desconocida; no es un fallback SPA. | Revisar el manifiesto de rutas y `check-routes.ps1`. |
+
+## 19. Seguridad, hardening y conformidad
+
+La seguridad de Glauk se apoya en un perímetro TLS, una superficie HTTP pequeña, secretos fuera de la imagen y un runtime mínimo. Esta sección describe el comportamiento implementado, las recomendaciones de despliegue y los límites que el operador debe conocer.
+
+### 19.1 Modelo de amenazas y límites de confianza
+
+| Amenaza (STRIDE) | Superficie | Control implementado |
+|---|---|---|
+| Spoofing | Admin y mutaciones. | `ADMIN_API_KEY` obligatoria para admin; `SECURITY_API_KEY` opcional para mutaciones; comparación en tiempo constante. |
+| Tampering | Body, rutas y assets. | Validación de entrada, límites de body, rutas canónicas congeladas y path traversal guard. |
+| Repudiation | Operaciones de negocio. | Auditoría en tablas, `request_id`, logs estructurados y `messageId` de Evolution. |
+| Information disclosure | Logs, errores y health. | Redacción, envelopes estables, health sin DSN y headers restrictivos. |
+| Denial of service | Reportes, imágenes y admin. | BodyLimit, límites de imagen, rate limit, timeouts y una réplica controlada. |
+| Elevation of privilege | Admin y secretos. | Clave admin fuera del código, sin default, comparación constante y `503` si falta. |
+
+Límites de confianza: el navegador y el proxy TLS están fuera del contenedor; PostgreSQL y Evolution son dependencias de red; `PUBLIC_DIR` es contenido controlado por el despliegue y no un directorio de uploads de usuario. Las URLs de Evolution y HOO son configuración del operador, no entrada arbitraria del usuario.
+
+### 19.2 Autenticación y autorización
+
+| Superficie | Sin clave | Con `SECURITY_API_KEY` | Con `ADMIN_API_KEY` |
+|---|---|---|---|
+| `GET` de lectura | Abierta | Abierta | Abierta |
+| Mutaciones de dominio | Abiertas por compatibilidad | Exige `X-API-Key` | No aplica |
+| Admin | `503 ADMIN_DISABLED` | No aplica | Exige `X-Admin-Key` o cookie `admin_key` |
+| `/health`, `/ready` | Abiertos | Abiertos | Abiertos |
+| Estáticos y SPA | Abiertos | Abiertos | Abiertos |
+
+Reglas:
+
+- `VerifyAdmin` usa `crypto/subtle.ConstantTimeCompare`. Si la clave configurada está vacía, devuelve `false`; `RequireAdminKey` responde `503 ADMIN_DISABLED` en vez de aceptar cualquier valor.
+- `RequireAPIKey` compara `X-API-Key` en tiempo constante cuando `SECURITY_API_KEY` está definida. Si está vacía, conserva el comportamiento histórico de mutaciones abiertas; en producción se recomienda definirla y migrar los paneles para enviarla.
+- La consola admin acepta `X-Admin-Key` o la cookie `admin_key`. Preferir la cabecera y usarla solo sobre HTTPS; no poner la clave en query strings ni en logs.
+- Las claves deben ser secretos de alta entropía, rotables y distintos entre entornos. Nunca se hardcodean en el repositorio ni se reutilizan entre staging y producción.
+- `AUTHENTICATION_API_KEY` es un alias legado de `EVOLUTION_API_KEY`; si ambas están definidas y difieren, el arranque falla. No se debe usar como mecanismo de autenticación de Glauk.
+
+### 19.3 Cabeceras, CSP y CORS
+
+Todas las respuestas reciben:
+
+```text
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: no-referrer
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Cross-Origin-Opener-Policy: same-origin
+Strict-Transport-Security: max-age=31536000; includeSubDomains   (solo HTTPS)
+```
+
+Los HTML de los paneles reciben además:
+
+```text
+default-src 'self';
+img-src 'self' data: blob:;
+script-src 'self';
+style-src 'self' 'unsafe-inline';
+font-src 'self' data:;
+connect-src 'self';
+frame-ancestors 'none';
+base-uri 'self';
+form-action 'self'
+```
+
+No hay CDNs, scripts inline ni `eval`. `style-src 'unsafe-inline'` se conserva mientras los paneles usen estilos calculados; cualquier cambio debe probar los cuatro paneles. La API no sirve HTML y no necesita CSP.
+
+CORS:
+
+- `CORS_ALLOWED_ORIGINS` es una lista CSV. El default `*` es solo para desarrollo/staging; en `production` el arranque rechaza `*`.
+- Se permiten `GET,POST,PUT,PATCH,DELETE,OPTIONS` y las cabeceras `Origin,Content-Type,Accept,X-Admin-Key,X-API-Key,X-Request-Id,Idempotency-Key`.
+- Se expone `X-Request-Id` para correlación.
+- No se habilita `Access-Control-Allow-Credentials` con `*`; los orígenes de producción deben ser exactos.
+- Los preflight `OPTIONS` no ejecutan lógica de dominio.
+
+### 19.4 Path traversal, estáticos y aislamiento de API
+
+El orden de registro es parte del contrato: rutas canónicas → alias → `/health` → `/api` 404 → estáticos → SPA → 404 global. Esto garantiza que un endpoint API desconocido **nunca** caiga al `index.html`.
+
+`RegisterStatic` aplica `traversalGuard` antes de servir archivos:
+
+1. Toma `OriginalURL` y `Path`, elimina la query y decodifica la URL.
+2. Rechaza NUL, barras invertidas y cualquier segmento exactamente igual a `..`.
+3. Normaliza con `path.Clean` y construye la ruta con `filepath.FromSlash`.
+4. Verifica con `filepath.Rel` que el resultado permanezca dentro de `PUBLIC_DIR`; si no, responde `403 FORBIDDEN`.
+5. Solo si el archivo existe y no es directorio lo sirve; si el tenant lo permite, hace fallback a su `index.html` para rutas SPA sin extensión.
+
+Los assets compartidos (`/shared/*`, `/robots.txt`) se sirven desde la raíz. Los paneles se aíslan por tenant/host o por path según `HOST_ROUTING_MODE`; un tenant desconocido no se resuelve a otro panel. No hay uploads a disco: las imágenes de Reportes llegan en base64 y se validan en memoria.
+
+### 19.5 Entradas, límites y abuso
+
+| Vector | Defensa |
+|---|---|
+| Body gigante | `BODY_LIMIT_BYTES=20971520` (20 MiB) en Fiber; rechazo temprano por `Content-Length`. |
+| Base64 bomba | Decodificación acotada por `REPORT_IMAGE_MAX_BYTES=10485760` y `image.DecodeConfig` sin descomprimir el bitmap completo. |
+| Imagen no JPEG | Firma binaria `FF D8 FF`, MIME `image/jpeg` y decodificador JPEG; otro formato → `IMAGEN_FORMATO`. |
+| Dimensiones abusivas | `REPORT_IMAGE_MIN_DIMENSION=200`, `MAX_DIMENSION=4096` y `MAX_PIXELS=16000000`. |
+| Fuerza bruta admin | Clave de alta entropía, comparación constante, TLS y rate limit del proxy. |
+| Envío masivo | `REPORT_RATE_LIMIT_PER_MINUTE=60`, ráfaga 10, token bucket por IP; `429 RATE_LIMITED` con `Retry-After`. |
+| Doble envío | `Idempotency-Key` o SHA-256 del contenido, reserva antes de enviar, TTL 10 min y límite de 1000 entradas. |
+| Path traversal | Guard de segmentos, `filepath.Clean`, `filepath.Rel` y `403`. |
+| XSS en caption | El caption se envía a WhatsApp, no se renderiza en HTML del servidor; el frontend usa `textContent`/escape. |
+| SSRF | `EVOLUTION_API_URL` y `HOO_GLOBAL_RATES_URL` son configuración del operador, no URLs de usuario. |
+| Fuga de secretos | Logger sin cuerpos/cabeceras, `MaskKey`, `MaskJID`, `MaskPhone` y secretos del orquestador. |
+| Inyección SQL | `pgx` con parámetros; Reportes no ejecuta SQL y los adaptadores están aislados. |
+
+La idempotencia y el rate limit viven en memoria del proceso. Con más de una réplica, un doble clic puede caer en instancias distintas; por eso el despliegue objetivo sigue siendo **una réplica**. Escalar exige mover ambos estados a un almacén compartido y ajustar la configuración del proxy para no agrupar a todos los clientes bajo su IP.
+
+### 19.6 Secretos y rotación
+
+| Secreto | Uso | Rotación |
+|---|---|---|
+| `ADMIN_API_KEY` | Consola administrativa. | Crear nueva clave, actualizar el secreto, reiniciar, verificar 200 con la nueva y retirar la anterior. |
+| `SECURITY_API_KEY` | Mutaciones cuando está habilitada. | Igual que admin; actualizar paneles y automatizaciones antes de retirar la anterior. |
+| `EVOLUTION_API_KEY` | Envío de imágenes/texto. | Rotar en Evolution y en el servicio; verificar un envío simulado y uno real de prueba. |
+| `DATABASE_URL` / `DB_PASSWORD` | PostgreSQL. | Rotar en la base y en el secreto; probar `/ready` antes de reabrir tráfico. |
+
+Reglas:
+
+- `.env` no se versiona ni se copia a la imagen; `.env.example` solo contiene placeholders.
+- En producción, las claves se cargan como secretos de Easypanel. No se pasan por argumentos de línea de comandos ni se escriben en logs.
+- `LOG_FORMAT=json` y `LOG_LEVEL=info` son el default operativo. Subir a `debug` solo de forma temporal y con revisión de lo que se registra.
+- Ante una fuga: rotar el secreto, reiniciar el servicio, invalidar la clave vieja en el proveedor, revisar logs por `401`/`403`, revisar accesos a la base y documentar el incidente. No borrar evidencia.
+
+### 19.7 Distroless y ejecución nonroot
+
+La imagen final es `gcr.io/distroless/static-debian12:nonroot`:
+
+- No tiene shell, gestor de paquetes, compilador, `curl` ni `wget`.
+- El único ejecutable es `/app/glauk`; los estáticos viven en `/app/public`.
+- El build usa `CGO_ENABLED=0`, `-trimpath` y `-ldflags="-s -w"`; el binario es estático y no depende de libc.
+- El proceso corre como `nonroot:nonroot` y no requiere privilegios.
+- No hay volúmenes persistentes: el binario es stateless y la base es un servicio externo.
+- `.dockerignore` excluye `.git`, `.env`, binarios, logs, `coverage.out` y `docs/`.
+- No se define `HEALTHCHECK` dentro de la imagen porque no hay cliente HTTP; el healthcheck lo hace Easypanel contra `/health`.
+- Siempre que la plataforma lo permita, montar el rootfs como read-only y limitar capabilities; la aplicación no escribe en disco.
+
+No se puede entrar con `docker exec ... sh`; el diagnóstico se hace por logs, `/health`, `/ready`, estado del contenedor y el deployment anterior.
+
+### 19.8 Conformidad y protección de datos
+
+Glauk trata datos operativos de socios, JIDs, comprobantes e imágenes. Las medidas implementadas son: minimización en logs, acceso restringido a secretos, TLS en el proxy, autenticación admin, envelopes sin causas internas, borrado lógico de impactos y backups con acceso controlado.
+
+Recomendaciones de cumplimiento:
+
+- Mantener una base legal y una política de retención para comprobantes, imágenes y logs; Glauk no decide plazos legales por sí solo.
+- Restringir el acceso a la base, a los backups y al visor de logs por rol.
+- Usar HTTPS obligatorio y HSTS en producción; no exponer PostgreSQL ni el puerto interno a Internet.
+- Documentar cada acceso administrativo y conservar el `request_id` de las operaciones relevantes.
+- Probar la restauración de backups, no solo su creación.
+- Revisar dependencias y la imagen base ante cada release; el runtime distroless reduce la superficie, pero no sustituye el escaneo de vulnerabilidades.
+
+Esta sección describe controles técnicos; no constituye una certificación legal ni una auditoría de cumplimiento externa.
+
+### 19.9 Checklist de despliegue seguro
+
+- [ ] `APP_ENV=production`, TLS terminado en el proxy y HSTS activo.
+- [ ] `DATABASE_URL` con `sslmode=require` o superior; `DB_ALLOW_INSECURE` solo con excepción documentada.
+- [ ] `ADMIN_API_KEY` definida como secreto y distinta de la de staging.
+- [ ] `SECURITY_API_KEY` definida si los paneles ya envían `X-API-Key`.
+- [ ] `CORS_ALLOWED_ORIGINS` con los hosts exactos, nunca `*`.
+- [ ] `EVOLUTION_API_URL`, `EVOLUTION_API_KEY` e instancia verificadas con un grupo de prueba.
+- [ ] `LOG_FORMAT=json`, `LOG_LEVEL=info`, sin `.env` dentro de la imagen.
+- [ ] Una réplica; idempotencia y rate limit en memoria documentados.
+- [ ] `/health` y `/ready` responden 200; smoke test verde.
+- [ ] Backup reciente y restauración de prueba validada.
+- [ ] Rootfs read-only/capabilities limitadas si la plataforma lo permite.
+
+### 19.10 Respuesta a fuga de clave
+
+1. Aislar el servicio o rotar el secreto afectado; no esperar a que termine la investigación.
+2. Invalidar la clave vieja en el proveedor correspondiente (Evolution, base o proxy).
+3. Reiniciar con la nueva clave y verificar `/ready`, admin y un envío de prueba.
+4. Buscar en logs `401`, `403`, rutas admin y `request_id` sospechosos; revisar accesos a la base.
+5. Conservar evidencia y abrir el incidente con impacto, detección, mitigación y causa raíz.
+6. Si la clave estuvo en un repositorio o imagen, rotarla aunque el commit se haya revertido.
 
 ## 20. Apéndices
 
-Catálogo SQL, `.env.example`, ejemplos curl, códigos, changelog y trazabilidad H-01…H-14.
+### 20.1 Glosario de términos financieros y operativos
+
+| Término | Definición |
+|---|---|
+| **Socio** | Entidad o persona con un perfil, monedas, porcentajes y un JID de WhatsApp. Puede estar activo o apagado. |
+| **Perfil** | Fila de `perfiles_glaukov` que representa a un socio y su configuración. |
+| **Perfil GENERAL** | Perfil matriz usado cuando no se especifica un socio; no tiene JID propio. |
+| **Lote** | Conjunto de tasas identificado por `id_tasa` (formato `T###`) y `created_at`. |
+| **Tasa vigente** | Lote más reciente por `created_at`/`id` que se usa para calcular o publicar. |
+| **Histórico** | Lotes anteriores que se conservan para auditoría y reportes. |
+| **Cartelera** | Imagen PNG que resume tasas de uno o más socios; se genera en el servidor de Tasas. |
+| **Snapshot congelado** | Copia de tasas y configuración fijada al liquidar un comprobante; no cambia si luego se publica otro lote. |
+| **D (depósito)** | Operación en la que el cliente entrega moneda; la polaridad puede sumar o restar según el contrato. |
+| **A (abono)** | Operación de abono/pago; tiene regla de polaridad propia y puede heredar configuración de FUNDDA. |
+| **P (pago)** | Tipo de operación de pago que usa `polar_P` y el porcentaje de pago. |
+| **Polaridad** | Signo (`+`/`-`) que se aplica a un lado de la operación; el frontend no debe recalcularlo. |
+| **Porcentaje de depósito** | Margen aplicado al lado de depósito; en el superset vive en `porcentaje.deposito`. |
+| **Porcentaje de pago** | Margen aplicado al lado de pago; en el superset vive en `porcentaje.pago`. |
+| **Spread** | Diferencia entre tasas de compra/venta o margen aplicado en la liquidación. |
+| **Triangulación** | Cálculo de una tasa cruzada usando una moneda base cuando no hay par directo. |
+| **Moneda base** | Divisa de referencia del socio; por defecto `USDT` en los puntos que lo requieren. |
+| **HOO** | Origen externo de tasas globales (`HOO_GLOBAL_RATES_URL`) con timeout y fallback. |
+| **Comprobante** | Evidencia cruda de una operación recibida desde WhatsApp, almacenada en `comprobantes_raw`. |
+| **Liquidación** | Resultado financiero calculado y congelado en `comprobantes_liq`. |
+| **Impacto** | Registro de la evidencia cruda de WhatsApp en `impactos_raw`; el borrado es lógico. |
+| **Hash largo / hash corto** | Identificadores del comprobante usados para deduplicación y enlaces. |
+| **JID** | Identificador de WhatsApp (`numero@s.whatsapp.net`, grupo `...@g.us` o `...@lid`). |
+| **Instancia** | Nombre de la instancia de Evolution que envía los mensajes; por defecto `Glauk`. |
+| **Tenant** | Superficie/panel resuelto por host o path: `tasas`, `perfiles`, `comprobantes` o `reportes`. |
+| **Envelope** | Sobre JSON de respuesta con `success`, `data` o `error`, `code` y `requestId`. |
+| **Puerto (hexagonal)** | Interfaz que define lo que Reportes necesita; los adaptadores conectan con otros dominios. |
+| **Alias** | Ruta histórica que conserva compatibilidad y responde con `Deprecation`/`Sunset`. |
+| **Canónico** | Ruta `/api/v1/*` que es la fuente de verdad y el sucesor de los alias. |
+| **Superset** | Forma de `monedas` que contiene las claves de los tres consumidores y se escribe de forma canónica. |
+| **Modo prueba** | Configuración que envía a `JID_GRUPO_PRUEBA` en lugar de a los socios reales. |
+
+### 20.2 Troubleshooting operativo y FAQ
+
+| Síntoma | Diagnóstico | Acción |
+|---|---|---|
+| `/health` 503 | `checks.database.status:"error"` o latencia alta. | Revisar PostgreSQL, credenciales, pool y red; no reiniciar en bucle. |
+| `/ready` 503 con `/health` 200 | El ping de base falla en la sonda de tráfico. | Revisar el mismo pool y el proxy; esperar 200 antes de reabrir. |
+| `/health` 200 y Evolution `simulated` | No hay `EVOLUTION_API_URL`. | Configurar URL/clave si se espera envío real. |
+| Envío 502 `EVOLUTION_UNAVAILABLE` | Evolution caída, URL/clave/instancia incorrecta o timeout. | Probar `evoprobe`; revisar `EVOLUTION_*`; no reintentar a ciegas. |
+| `JID_INVALIDO` | `id_grupo` no cumple el regex o quedó un placeholder. | Corregir en Perfiles; usar un JID verificado; nunca inventar un número. |
+| `JID_NO_DISPONIBLE` | Perfil sin JID. | Completar el perfil o usar `JID_GRUPO_PRUEBA` en modo prueba. |
+| `IMAGEN_FORMATO` | Base64 no es JPEG o falta la firma. | Regenerar con canvas; verificar MIME y prefijo data URL. |
+| `IMAGEN_MUY_GRANDE` / `PAYLOAD_TOO_LARGE` | Supera 10 MiB de imagen o 20 MiB de body. | Reducir calidad/tamaño; no subir límites sin revisar memoria. |
+| `IMAGEN_DIMENSIONES` | Fuera de 200–4096 px o >16 MP. | Ajustar el canvas a 1080×1350. |
+| `429 RATE_LIMITED` | Más de 60 envíos/minuto o ráfaga >10. | Esperar `Retry-After`; revisar automatizaciones. |
+| `409 CONFLICT` / `ENVIO_EN_CURSO` | La misma clave de idempotencia está en curso. | Reutilizar la clave y esperar; no generar una nueva para el mismo envío. |
+| Respuesta `duplicate:true` | El envío ya se había completado. | No reenviar; verificar `messageId`. |
+| Panel en blanco | Asset 404, `PUBLIC_DIR` incorrecto, host/path mode o CSP. | Revisar Network, `PUBLIC_DIR`, tenant y CSP. |
+| Alias 404 inesperado | Alias no registrado o ruta retirada. | Ejecutar `check-routes.ps1`; revisar el orden de registro. |
+| Admin 503 | `ADMIN_API_KEY` vacía. | Configurar el secreto y reiniciar. |
+| Admin 401 | `X-Admin-Key` o cookie incorrecta. | Verificar la clave activa; rotar si hay duda. |
+| `docker exec ... sh` falla | La imagen es distroless. | Usar logs, `/health`, `/ready` y el estado del contenedor. |
+| Migración falla | Permisos, conexión o migración ya aplicada. | Verificar `psql`, backup, `information_schema` e índices; no editar datos a mano sin aprobación. |
+| Backup no restaura | Dump incompleto o versión incompatible. | Probar en staging con la misma versión; documentar el resultado. |
+
+Preguntas frecuentes:
+
+**¿Por qué no hay Prometheus?** Porque la operación objetivo es un solo contenedor y una sola réplica; los logs, las sondas y la base cubren las métricas mínimas. Añadir Prometheus ahora duplicaría infraestructura sin mejorar la detección.
+
+**¿Por qué el reporte se genera en el navegador?** Para evitar Chromium/Puppeteer en el servidor, reducir la imagen y mantener el render determinista. El backend valida el JPEG y lo envía.
+
+**¿Puedo escalar a dos réplicas?** No con la idempotencia y el rate limit actuales en memoria. Primero hay que moverlos a un almacén compartido y ajustar el límite global.
+
+**¿Qué pasa si cambio `monedas` a mano?** El codec tolera las formas históricas, pero la escritura canónica es el superset. Una edición manual puede perder claves; usar la API de Perfiles y auditar el resultado.
+
+**¿Los alias son permanentes?** No. Tienen `Deprecation` y `Sunset` (31/12/2027); se retiran tras 30 días sin uso y nunca durante el cutover.
+
+**¿Dónde está el changelog?** En [`CHANGELOG.md`](CHANGELOG.md), con la versión `1.0.0` y el detalle de compatibilidad, migraciones y seguridad.
+
+### 20.3 Apéndices técnicos
+
+#### 20.3.1 Configuración y secretos
+
+La plantilla completa es [`.env.example`](.env.example). Las variables sensibles (`DATABASE_URL`, `DB_PASSWORD`, `EVOLUTION_API_KEY`, `ADMIN_API_KEY`, `SECURITY_API_KEY`) se cargan como secretos del orquestador; `.env` es solo para desarrollo local y nunca se copia a la imagen. La matriz completa, precedencia y validaciones están en el Capítulo 5.
+
+#### 20.3.2 Catálogo de tablas
+
+| Tabla | Dueño | Uso |
+|---|---|---|
+| `perfiles_glaukov` | Perfiles | Socios, `monedas`, `mostrar`, actividad y JID. |
+| `tasas_glaukov` | Tasas | Lotes y valores de tasas. |
+| `comprobantes_raw` | Comprobantes | Evidencia cruda de comprobantes. |
+| `comprobantes_liq` | Comprobantes | Snapshot financiero congelado. |
+| `impactos_raw` | Comprobantes | Evidencia de WhatsApp con borrado lógico. |
+| `cola_fb`, `comprobantes_fb`, `comprobantes_auditados_fb` | Comprobantes | Cola y proyecciones de auditoría. |
+
+`reportes` no tiene tablas propias y no ejecuta SQL; consume puertos de Perfiles y Comprobantes. El detalle de columnas, JSONB, índices y migraciones está en el Capítulo 12 y en [`migrations/README.md`](migrations/README.md).
+
+#### 20.3.3 Rutas, contratos y OpenAPI
+
+- Matriz canónica y alias: Capítulo 11.
+- Manifiesto OpenAPI: [`docs/openapi.yaml`](docs/openapi.yaml).
+- Verificación de superficie: `.\scripts\check-routes.ps1`.
+- Una ruta API desconocida responde `404 NOT_FOUND`; nunca cae al SPA.
+
+#### 20.3.4 Códigos de error frecuentes
+
+| Código | HTTP | Significado |
+|---|---:|---|
+| `INVALID_JSON` / `VALIDATION_ERROR` | 400 | Cuerpo o campo inválido. |
+| `DESTINO_REQUERIDO`, `IMAGEN_REQUERIDA`, `TEXTO_REQUERIDO` | 400 | Falta un dato obligatorio de Reportes. |
+| `UNAUTHORIZED` | 401 | Clave admin/API ausente o inválida. |
+| `FORBIDDEN` | 403 | Ruta fuera de `PUBLIC_DIR` o tenant no permitido. |
+| `SOCIO_NO_ENCONTRADO`, `NOT_FOUND` | 404 | Recurso o ruta inexistente. |
+| `CONFLICT`, `ENVIO_EN_CURSO` | 409 | Envío duplicado en curso. |
+| `IMAGEN_MUY_GRANDE`, `PAYLOAD_TOO_LARGE` | 413 | Límite de imagen o body. |
+| `IMAGEN_FORMATO` | 415 | No es un JPEG válido. |
+| `IMAGEN_DIMENSIONES`, `JID_NO_DISPONIBLE`, `JID_INVALIDO` | 422 | Regla de negocio de Reportes. |
+| `RATE_LIMITED` | 429 | Límite de envíos. |
+| `INTERNAL_ERROR` | 500 | Error no controlado. |
+| `EVOLUTION_UNAVAILABLE` | 502 | Evolution caída o rechazo. |
+| `ADMIN_DISABLED` | 503 | Falta `ADMIN_API_KEY`. |
+| `TIMEOUT` | 504 | Timeout de contexto o dependencia. |
+
+#### 20.3.5 Changelog, auditoría y evidencia
+
+- Versión y cambios: [`CHANGELOG.md`](CHANGELOG.md).
+- Migración idempotente: [`internal/comprobantes/migrations/0001_impactos_soft_delete.sql`](internal/comprobantes/migrations/0001_impactos_soft_delete.sql).
+- Auditoría pre-cutover: [`scripts/audit-pre-cutover.sql`](scripts/audit-pre-cutover.sql) y [`scripts/audit-db.ps1`](scripts/audit-db.ps1).
+- Smoke HTTP: [`scripts/smoke.ps1`](scripts/smoke.ps1).
+- Documento normativo: `../PLAN_CONSOLIDACION_GLAUK.md`.
+
+#### 20.3.6 Trazabilidad de hallazgos H-01…H-14
+
+| ID | Hallazgo | Resolución | Evidencia |
+|---|---|---|---|
+| H-01 | Tres formas de `monedas`. | Codec superset y escritura canónica. | `monedas_test.go`. |
+| H-02 | Actividad divergente. | `mostrar.tasas` canónico; `activo` solo apaga. | `service_test.go`. |
+| H-03 | JID placeholder. | Validación estricta, default vacío y auditoría. | `target_test.go`. |
+| H-04 | `pgx` dual. | Pin `v5.10.0`. | `go.mod`. |
+| H-05 | Go dual. | `go 1.27.2`. | `go.mod` y Dockerfile. |
+| H-06 | Clave admin hardcodeada. | `ADMIN_API_KEY` + tiempo constante. | `admin_test.go`. |
+| H-07 | Envelopes distintos. | Envelope canónico con compatibilidad. | `response_test.go`. |
+| H-08 | Límites dispares. | Body 20 MiB, imagen 10 MiB, Evolution 25 s. | `config_test.go`. |
+| H-09 | Colisión `/api/reportes`. | Listado legacy + dominio en `/api/v1/reportes`. | `TestNoDuplicateRoutes`. |
+| H-10 | Rutas faltantes. | Matriz de alias y adaptadores. | Contract tests. |
+| H-11 | `activo` fuera de decisión. | H-02 + auditoría de conjuntos. | Test de publicación. |
+| H-12 | Sin autenticación en mutaciones. | `SECURITY_API_KEY` opcional y admin obligatorio. | Tests 401/503. |
+| H-13 | Archivos gigantes. | Shell + módulos; presupuesto de líneas. | `check-file-length.ps1`. |
+| H-14 | `BodyLimit` ausente. | `BODY_LIMIT_BYTES` explícito. | `config_test.go`. |
+
+### 20.4 ADRs
+
+Las seis decisiones estructurales se resumen aquí. El contexto ejecutivo y las alternativas descartadas están en el plan de consolidación, §0.1.
+
+| ADR | Decisión | Alternativas | Consecuencia |
+|---|---|---|---|
+| ADR-0001 | Un módulo Go y un binario con cuatro dominios aislados. | Cuatro microservicios. | Menos coste operativo, un pool y un despliegue; el aislamiento se garantiza con paquetes y tests. |
+| ADR-0002 | `pgx v5.10.0` y `pgxmock` mientras la suite no migre a PostgreSQL efímero. | Actualizar a v5.11 y romper mocks. | Build reproducible; la retirada de `pgxmock` queda como deuda explícita. |
+| ADR-0003 | Reportes hexagonal, sin SQL ni pgx. | Reportes con repositorio propio. | El dominio es testeable y no conoce la base; los adaptadores concentran la integración. |
+| ADR-0004 | Canvas en navegador; el backend valida JPEG. | Chromium/Puppeteer en el servidor. | Imagen distroless pequeña, sin navegador; el render depende del navegador del panel. |
+| ADR-0005 | Codec superset de `monedas` y escritura canónica. | Migración masiva o un solo formato. | Compatibilidad con los tres consumidores sin reescritura destructiva. |
+| ADR-0006 | Rutas canónicas `/api/v1/*` + 64 alias con `Deprecation`/`Sunset`. | Romper rutas legacy de inmediato. | Los paneles siguen funcionando; la deuda de alias tiene fecha y métrica de uso. |

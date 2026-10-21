@@ -12,7 +12,6 @@
 
 # Temporales
 *.log
-*.tmp
 *.swp
 .DS_Store
 Thumbs.db
@@ -22,8 +21,11 @@ coverage.out
 *.test
 *.prof
 
-# Evidencia local de auditoria
-/audit-pre-cutover.csv
+# Evidencia local y artefactos de trabajo
+*.csv
+*.bak
+*.orig
+*.tmp
 
 # Editores
 .idea/
