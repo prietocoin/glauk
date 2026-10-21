@@ -1,34 +1,17 @@
-const CACHE = 'glauk-comprobantes-v1';
-const ASSETS = [
-  './', './index.html', './manifest.json', './js/main.js', './js/api.js',
-  './js/views/comprobantes.js', './js/views/directorio.js', './js/views/reportes.js',
-  './js/views/admin.js', './js/components/modal.js', './js/components/tabla.js',
-  '../shared/css/base.css', '../shared/css/components.css', '../shared/css/print.css',
-  '../shared/js/dom.js', '../shared/js/http.js', '../shared/js/format.js',
-  '../shared/js/toast.js', '../shared/js/auth.js', '../shared/js/reporte-canvas.js',
-  '../shared/vendor/html2canvas.min.js', '../shared/brand/favicon.svg',
-  '../shared/brand/logo-fundablock.png'
-];
+/**
+ * @file sw.js
+ * @description Service Worker atómico para instalación PWA en glauk2.
+ * Mantiene la app instalable sin almacenar en caché las peticiones de la API REST.
+ */
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
+self.addEventListener('install', () => {
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(
-    keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))
-  )).then(() => self.clients.claim()));
+  event.waitUntil(self.clients.claim());
 });
 
-self.addEventListener('fetch', (event) => {
-  const request = event.request;
-  if (request.method !== 'GET') return;
-  const url = new URL(request.url);
-  if (url.origin !== location.origin || url.pathname === '/api' || url.pathname.startsWith('/api/')) return;
-  event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-    if (!response.ok || response.type !== 'basic') return response;
-    const copy = response.clone();
-    caches.open(CACHE).then((cache) => cache.put(request, copy));
-    return response;
-  }).catch(() => request.mode === 'navigate' ? caches.match('./index.html') : Response.error())));
+self.addEventListener('fetch', () => {
+  // Peticiones pasan directo a la red para garantizar datos contables en tiempo real
 });

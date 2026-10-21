@@ -13,8 +13,14 @@ import (
 	"glauk/internal/platform/config"
 )
 
-const panelCSP = "default-src 'self'; img-src 'self' data: blob:; script-src 'self'; " +
-	"style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; " +
+// panelCSP conserva el aislamiento del panel y permite lo mínimo que necesita
+// la interfaz Glauk2: Alpine evalúa expresiones declarativas (unsafe-eval),
+// los comprobantes pueden vivir en R2 (img https) y los visores externos de
+// Tasas/Perfiles se mantienen embebidos para no romper la paridad visual.
+const panelCSP = "default-src 'self'; img-src 'self' data: blob: https:; " +
+	"script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; " +
+	"font-src 'self' data:; connect-src 'self'; " +
+	"frame-src https://tasas.jairokov.com https://perfiles.jairokov.com; " +
 	"frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 
 var hashedAsset = regexp.MustCompile(`(?i)[.-][0-9a-f]{8,}\.`)

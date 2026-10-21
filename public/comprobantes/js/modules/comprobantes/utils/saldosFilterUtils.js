@@ -1,0 +1,52 @@
+/**
+ * @file saldosFilterUtils.js
+ * @description Utilidades de filtrado y formateo para comprobantes.
+ */
+
+export function formatMonto(val) {
+  const num = parseFloat(val) || 0;
+  return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export function formatTasa(val) {
+  const num = parseFloat(val) || 0;
+  return num > 99.99 ? Math.trunc(num).toLocaleString('en-US') : num.toFixed(2);
+}
+
+export function obtenerME1(item) {
+  if (!item) return 0;
+  return item.me1 !== undefined && item.me1 !== null
+    ? item.me1
+    : (item.monto_1 !== undefined ? item.monto_1 : item.monto || 0);
+}
+
+export function obtenerME2(item) {
+  if (!item) return 0;
+  return item.me2 !== undefined && item.me2 !== null
+    ? item.me2
+    : (item.monto_2 !== undefined ? item.monto_2 : 0);
+}
+
+export function obtenerTasaSocioCalculada(item, numSocio) {
+  if (!item) return 1.0;
+  return numSocio === 1 ? (item.tasa_1 || 1.0) : (item.tasa_2 || 1.0);
+}
+
+export function claseInsignia(tipoOp) {
+  const t = String(tipoOp || 'D').toUpperCase().trim();
+  if (t === 'D') return 'bg-emerald-950 text-emerald-300 border-emerald-500/40';
+  if (t === 'P') return 'bg-rose-950 text-rose-300 border-rose-500/40';
+  if (t === 'A') return 'bg-cyan-950 text-cyan-300 border-cyan-500/40';
+  return 'bg-slate-800 text-slate-300 border-slate-600';
+}
+
+export function filtrarComprobantesPorRango(comprobantes, fechaInicio, fechaFin) {
+  if (!Array.isArray(comprobantes)) return [];
+  return comprobantes.filter(item => {
+    if (!item.fecha) return true;
+    const f = new Date(item.fecha);
+    if (fechaInicio && f < new Date(fechaInicio)) return false;
+    if (fechaFin && f > new Date(fechaFin)) return false;
+    return true;
+  });
+}

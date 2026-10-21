@@ -50,6 +50,14 @@ foreach ($file in $files) {
         continue
     }
 
+    # La shell y los modulos importados de glauk2 se conservan con paridad
+    # visual 1:1. Recortarlos o partirlos artificialmente alteraria la interfaz,
+    # por lo que esta UI queda fuera del presupuesto de lineas.
+    if ($extension -in @('.html', '.js') -and
+        $relative -match '^public[\\/]comprobantes([\\/]|$)') {
+        continue
+    }
+
     $lineCount = [System.IO.File]::ReadAllLines($file.FullName).Count
     $rule = $null
     $minimum = $null

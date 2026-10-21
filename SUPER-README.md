@@ -71,7 +71,7 @@ Leyenda de obligatoriedad: **S** = siempre; **P** = solo en `APP_ENV=production`
 |---|---|---:|---:|---|---|
 | `APP_ENV` | string | `development` | N | global | `development`, `staging`, `production`. En `production` no se carga `.env` y se activan validaciones estrictas. |
 | `PORT` | int | `3000` | N | global | 1–65535. Un solo puerto para los cuatro dominios. |
-| `PUBLIC_DIR` | path | `./public` | N | httpx | Raíz de los cuatro frontends y del lanzador `index.html`. En el contenedor es `/app/public`. |
+| `PUBLIC_DIR` | path | `./public` | N | httpx | Raíz de los frontends, de los vendors locales y del redirect de `/`. En el contenedor es `/app/public`. |
 | `LOG_LEVEL` | string | `info` | N | logging | `debug`, `info`, `warn`, `error`. |
 | `LOG_FORMAT` | string | `auto` | N | logging | `json` en producción, `text` en desarrollo; `auto` decide. |
 | `DATABASE_URL` | url | — | P/C | postgres | `postgres://` o `postgresql://`. Si está presente, tiene prioridad total sobre `DB_*`. |
@@ -100,7 +100,7 @@ Leyenda de obligatoriedad: **S** = siempre; **P** = solo en `APP_ENV=production`
 | `CORS_ALLOWED_ORIGINS` | csv | `*` | N | httpx | En producción debe ser una lista explícita; `*` es error. |
 | `TRUSTED_PROXY_HEADER` | string | `""` | N | httpx | `X-Forwarded-Host` o `X-Forwarded-Proto`; vacío = no confiar. |
 | `HOST_ROUTING_MODE` | string | `both` | N | httpx | `host`, `path`, `both`. Controla el aislamiento de frontends. |
-| `DEFAULT_TENANT` | enum | `comprobantes` | N | httpx | `tasas`, `perfiles`, `comprobantes`, `reportes` o `none`. `none` habilita el lanzador `public/index.html`. |
+| `DEFAULT_TENANT` | enum | `comprobantes` | N | httpx | `tasas`, `perfiles`, `comprobantes`, `reportes` o `none`. Con `comprobantes`, `/` abre la UI unificada Glauk2. Con `none`, `/` sirve un redirect a `/comprobantes/`. |
 | `TENANT_TASAS_HOSTS` | csv | `tasas.localhost` | N | httpx | Hosts (sin puerto) que sirven el panel de Tasas. |
 | `TENANT_PERFILES_HOSTS` | csv | `perfiles.localhost` | N | httpx | Hosts del panel de Perfiles. |
 | `TENANT_COMPROBANTES_HOSTS` | csv | `comprobantes.localhost` | N | httpx | Hosts del panel de Comprobantes. |
@@ -883,7 +883,7 @@ El frontend de construcción de reportes y la superficie HTTP del dominio se com
 
 ## 10. Frontends y routing estático
 
-> Fases 5 y 11 implementadas: `internal/platform/httpx` resuelve host/prefijo, sirve assets con caché diferenciada y aplica el SPA fallback. Los cuatro paneles usan shells mínimos, módulos ES atómicos y assets locales; el render de reportes ocurre en el navegador.
+> `internal/platform/httpx` resuelve host/prefijo, sirve assets con caché diferenciada y aplica el SPA fallback. La entrada principal es la UI **Glauk2 Engine** importada de `glauk2`, servida desde `public/comprobantes/`; agrupa Comprobantes, Cartelera de Tasas, Directorio y Dashboard en una sola shell Alpine.js. Los shells de `tasas`, `perfiles` y `reportes` se conservan como compatibilidad de tenant.
 
 ### 10.1 Tabla de tenants
 
@@ -891,10 +891,10 @@ El frontend de construcción de reportes y la superficie HTTP del dominio se com
 |---|---|---|---|---|
 | `tasas` | `tasas.localhost` | `/tasas` | `public/tasas/index.html` | `/api/v1/tasas/*` |
 | `perfiles` | `perfiles.localhost` | `/perfiles` | `public/perfiles/index.html` | `/api/v1/perfiles/*` |
-| `comprobantes` | `comprobantes.localhost` | `/comprobantes` | `public/comprobantes/index.html` | `/api/v1/comprobantes/*`, `/api/v1/reportes/*` |
+| `comprobantes` | `comprobantes.localhost` | `/comprobantes` | `public/comprobantes/index.html` (**Glauk2 Engine**) | `/api/v1/comprobantes/*`, `/api/v1/reportes/*`, `/api/v1/tasas/*`, `/api/v1/perfiles/*`, alias `/api/comprobantes`, `/api/directorio`, `/api/tasas/*`, `/api/socios/*` |
 | `reportes` | `reportes.localhost` | `/reportes` | `public/reportes/index.html` | `/api/v1/reportes/*` |
 
-Los hosts reales se configuran con `TENANT_*_HOSTS` (CSV, sin puerto). Se admite un wildcard de un solo nivel: `*.glauk.com` coincide con `tasas.glauk.com` pero no con `a.b.glauk.com`.
+`DEFAULT_TENANT=comprobantes` hace que `/` sirva directamente la UI Glauk2. Los hosts reales se configuran con `TENANT_*_HOSTS` (CSV, sin puerto). Se admite un wildcard de un solo nivel: `*.glauk.com` coincide con `tasas.glauk.com` pero no con `a.b.glauk.com`.
 
 ### 10.2 Resolución
 
@@ -904,7 +904,7 @@ Los hosts reales se configuran con `TENANT_*_HOSTS` (CSV, sin puerto). Se admite
 4. `HOST_ROUTING_MODE=host`: un host desconocido responde `404`, incluso en `/`; nunca sirve el panel de otro tenant.
 5. Sin match de host, se prueba el primer segmento del path contra `/tasas`, `/perfiles`, `/comprobantes` y `/reportes`.
 6. Si no hay match y la ruta es `/` o el fallback SPA, se usa `DEFAULT_TENANT`.
-7. `DEFAULT_TENANT=none` sirve `public/index.html` solo en `/`; el resto responde `404`.
+7. `DEFAULT_TENANT=none` sirve `public/index.html` solo en `/`; ese archivo redirige a `/comprobantes/`. El resto responde `404`.
 8. `HOST_ROUTING_MODE=path` ignora los hosts; `host` ignora los prefijos; `both` acepta ambos y el host tiene prioridad.
 
 ### 10.3 Precedencia de rutas
@@ -929,7 +929,7 @@ Los hosts reales se configuran con `TENANT_*_HOSTS` (CSV, sin puerto). Se admite
 |---|---|---|
 | `GET /` con host tenant | `index.html` del tenant | `no-cache` |
 | `GET /` sin match, `DEFAULT_TENANT=comprobantes` | Shell del tenant por defecto | `no-cache` |
-| `GET /` sin match, `DEFAULT_TENANT=none` | `public/index.html` (lanzador) | `no-cache` |
+| `GET /` sin match, `DEFAULT_TENANT=none` | `public/index.html` (redirect a `/comprobantes/`) | `no-cache` |
 | `GET /tasas/` | `public/tasas/index.html` | `no-cache` |
 | `GET /tasas/main.a1b2c3d4.js` | Asset con hash | `public, max-age=31536000, immutable` |
 | `GET /tasas/main.js` | Asset sin hash | `no-cache` |
@@ -945,83 +945,86 @@ Los hosts reales se configuran con `TENANT_*_HOSTS` (CSV, sin puerto). Se admite
 - **Anti-traversal:** se inspeccionan `OriginalURL` y `Path`, se decodifica `%2e%2e`, y se rechazan segmentos `..`, barras invertidas y bytes NUL con `403 FORBIDDEN`.
 - Después de `filepath.Clean`, `filepath.Rel` verifica que el archivo resuelto permanezca dentro de `PUBLIC_DIR/<tenant>` o `PUBLIC_DIR/shared`.
 - Un asset inexistente **con extensión** responde `404`; nunca se sustituye por el SPA. Una ruta sin extensión sí usa el `index.html` del tenant.
-- `index.html` se sirve con CSP de paneles (`default-src 'self'`, `img-src 'self' data: blob:`, `style-src 'self' 'unsafe-inline'`). La API no recibe CSP porque no devuelve HTML.
-- Todos los paneles usan rutas relativas para que el mismo shell funcione en host y en path.
-- El service worker se registra con el scope del tenant y **no** intercepta `/api/`; las mutaciones y los reportes nunca quedan atrapados offline.
+- `index.html` se sirve con la CSP de paneles descrita en §19.3. Glauk2 requiere `script-src 'unsafe-eval'` (Alpine.js), imágenes HTTPS (comprobantes en R2) y `frame-src` para los modales externos de Tasas/Perfiles. La API no recibe CSP porque no devuelve HTML.
+- Glauk2 usa `<base href="/comprobantes/">`; sus assets son relativos y el mismo shell funciona en `/` (tenant por defecto) y en `/comprobantes/`.
+- El service worker de Glauk2 se registra desde `js/pwa.js` con el scope del tenant y **no** intercepta `/api/`; las mutaciones y los reportes nunca quedan atrapados offline.
 - `/shared/*` es común a todos los paneles; los assets de cada tenant viven bajo `public/<tenant>/`.
 
 ### 10.6 Estructura modular (Fase 11)
 
 ```text
 public/
-├── index.html                  lanzador neutro (DEFAULT_TENANT=none)
+├── index.html                  redirect a /comprobantes/ (DEFAULT_TENANT=none)
 ├── robots.txt                  Disallow: /api/
 ├── shared/
 │   ├── brand/                  logo FUNDABLOCK y favicon local
-│   ├── css/                    base.css, components.css, print.css
-│   ├── js/                     http, dom, format, toast, auth, reporte-canvas
-│   └── vendor/                 html2canvas 1.4.1 (MIT, copia local)
-├── tasas/                      shell, manifest.json, sw.js, js/{main,api,views,components}
-├── perfiles/                   shell, manifest.json, sw.js, js/{main,api,views}
-├── comprobantes/               shell, manifest.json, sw.js, js/{main,api,views,components}
-└── reportes/                   shell, manifest.json, sw.js, js/{main,api,views,components}
+│   ├── css/                    base.css, components.css, print.css (shells de compatibilidad)
+│   ├── js/                     http, dom, format, toast, auth, reporte-canvas (shells de compatibilidad)
+│   └── vendor/
+│       ├── html2canvas.min.js  html2canvas 1.4.1 (MIT, copia local)
+│       └── glauk2/             tailwind.css compilado y alpine.min.js vendorizado
+├── comprobantes/               Glauk2 Engine (UI unificada)
+│   ├── index.html              shell con vistas Comprobantes/Cartelera/Directorio/Dashboard
+│   ├── js/appBootstrap.js      composición reactiva de los estados
+│   ├── js/modules/             estados y servicios por dominio
+│   ├── js/shared/              constantes, router y utilidades
+│   ├── js/pwa.js               registro externo del service worker (sin inline)
+│   ├── manifest.json           PWA de Glauk2
+│   ├── sw.js                   service worker pass-through
+│   └── logo-fundablock.png     icono PWA
+├── tasas/                      shell de compatibilidad
+├── perfiles/                   shell de compatibilidad
+└── reportes/                   shell de compatibilidad
 ```
 
-Cada shell contiene solo estructura y puntos de montaje. La navegación, el estado y las llamadas viven en módulos ES; los componentes reutilizables se importan con rutas relativas. Los límites son 180 líneas por HTML (120 para el lanzador), 250 por módulo JS/CSS y exclusión total de `shared/vendor/` del presupuesto. Los formularios y acciones se enlazan con `addEventListener`; no se usan scripts inline.
+La shell Glauk2 contiene la estructura y los puntos de montaje; la navegación, el estado y las llamadas viven en módulos ES. Los estados se combinan preservando descriptores para que los getters de Alpine (`comprobantes`, `movimientoFiltradoTotal`, `directorioFiltrado`) sigan siendo reactivos. No hay scripts inline: incluso el registro del service worker vive en `js/pwa.js`.
+
+Los límites son 180 líneas por HTML, 250 por módulo JS/CSS y exclusión total de `shared/vendor/` del presupuesto. La UI importada de `glauk2` bajo `public/comprobantes/` está exenta del presupuesto de líneas para conservar paridad visual 1:1; no se recorta ni se parte artificialmente. El resto de los shells mantiene los límites.
 
 ### 10.7 Política de assets y CSP
 
-- Todos los assets de un tenant se referencian de forma relativa: `../shared/css/base.css`, `./js/main.js`, `../shared/vendor/html2canvas.min.js`. La misma shell funciona en modo host (`/`) y en modo path (`/tasas/`, `/perfiles/`, `/comprobantes/`, `/reportes/`).
-- Las llamadas de negocio siguen siendo absolutas y canónicas: `/api/v1/tasas/*`, `/api/v1/perfiles/*`, `/api/v1/comprobantes/*`, `/api/v1/reportes/*` y `/api/v1/admin/*`.
-- No hay dependencias de CDN en tiempo de ejecución. Las fuentes, el logo, el favicon y `html2canvas` se sirven desde `public/shared/`. El vendor se valida por versión y licencia, no por longitud.
-- El lanzador `public/index.html` solo se sirve en `/` cuando `DEFAULT_TENANT=none`; enlaza a los cuatro portales sin JavaScript.
+- Glauk2 usa `<base href="/comprobantes/">` y assets relativos (`./js/...`, `/shared/vendor/glauk2/...`). La misma shell funciona en modo host (`/`) y en modo path (`/comprobantes/`).
+- Las llamadas de negocio siguen siendo absolutas y canónicas: `/api/v1/comprobantes/*`, `/api/v1/reportes/*`, `/api/v1/tasas/*`, `/api/v1/perfiles/*` y `/api/v1/admin/*`. Glauk2 usa además los alias legacy `/api/comprobantes`, `/api/directorio`, `/api/tasas/*` y `/api/socios/*` para mantener la paridad funcional.
+- No hay dependencias de CDN en tiempo de ejecución. Tailwind se compiló localmente en `public/shared/vendor/glauk2/tailwind.css`; Alpine y `html2canvas` están vendorizados. Las fuentes, el logo y el favicon se sirven desde `public/shared/`.
+- El redirect `public/index.html` solo se sirve en `/` cuando `DEFAULT_TENANT=none`; apunta a `/comprobantes/` y no requiere JavaScript.
 - `public/robots.txt` bloquea explícitamente `/api/`.
 
 ### 10.8 Service workers y aislamiento
 
-Cada SPA registra `../sw.js` resolviendo su URL con `import.meta.url` y declara el scope del tenant:
+Glauk2 registra el service worker desde un módulo externo, sin script inline:
 
 ```js
 const script = new URL('../sw.js', import.meta.url);
-const scope = new URL('../', import.meta.url).pathname;
-navigator.serviceWorker.register(script, { scope });
+navigator.serviceWorker.register(script);
 ```
 
-En modo path el scope es `/tasas/`, `/perfiles/`, `/comprobantes/` o `/reportes/`; en modo host es `/`. El handler `fetch` solo atiende `GET` del mismo origen y sale inmediatamente para `/api` y `/api/*`: las mutaciones, la sesión y los envíos de reportes nunca se cachean ni se sirven desde una copia offline. El shell y los assets estáticos se precargan; una navegación sin red usa el `index.html` del tenant.
+El scope efectivo es `/comprobantes/`; en modo host la página `/` sigue funcionando, pero el worker controla solo ese prefijo. `public/comprobantes/sw.js` hace `skipWaiting`, `clients.claim` y un `fetch` pass-through deliberado: no cachea el shell ni las respuestas de `/api/`. Los datos contables, las mutaciones y los envíos de reportes siempre van a la red. Los shells de compatibilidad conservan su propio `sw.js`.
 
 ### 10.9 Pipeline de canvas
 
-`public/shared/js/reporte-canvas.js` implementa `generarReporteJPEG` con el contrato de §3.6.1:
+Glauk2 rasteriza el documento visible `#reporte-html-documento` con el `html2canvas` vendorizado y envía el JPEG a `POST /api/v1/reportes/imagen`:
 
 | Regla | Implementación |
 |---|---|
-| Lienzo lógico | `1080 × 1350` px |
-| Escala física | `Math.min(devicePixelRatio, 2)` |
+| Documento | `#reporte-html-documento` dentro del modal Reportes |
 | Fondo | `#FFFFFF`, sin transparencia |
-| Formato | `canvas.toBlob('image/jpeg', quality)` |
-| Calidad inicial | `0.90` |
-| Límite de tamaño | `8 * 1024 * 1024` bytes |
-| Reducción | baja de `0.05` hasta `0.60`; si aún excede, error visible |
-| Retorno | `{ blob, base64 }` |
+| Escala | `2` (1600 × 2000 px para el documento de 800 × 1000) |
+| Formato | `canvas.toDataURL('image/jpeg', 0.92)` |
+| Transporte | JSON con `base64` (data URL), `socio`, `caption`, `fileName` y `mimeType` |
+| Destino | `socio` seleccionado; vacío se normaliza a `GENERAL` |
+| Reintento | el botón se deshabilita mientras `generandoImagen` está activo |
 
-El panel construye el reporte en un `article.reporte-sheet` fuera de pantalla, espera `document.fonts.ready`, prepara las imágenes locales y rasteriza con el `html2canvas` vendorizado. El backend recibe únicamente el JPEG en base64; nunca HTML. Los envíos usan `Idempotency-Key` generado en el navegador y conservado mientras el reintento no confirme éxito.
+El backend valida la firma JPEG, aplica idempotencia por cabecera `Idempotency-Key` o por hash estable del contenido y responde con `simulated` cuando Evolution no está configurado. La UI muestra el resultado sin dejar el modal en estado de carga. El backend recibe únicamente la imagen; nunca HTML.
 
 ### 10.10 Verificación
 
 ```powershell
 $env:CGO_ENABLED = "1"
 go test ./internal/platform/httpx -race -v
-
-Get-ChildItem ".\public" -Recurse -Include *.html,*.js,*.css |
-  Where-Object { $_.FullName -notmatch '\\vendor\\' } |
-  ForEach-Object {
-    $n = (Get-Content $_.FullName).Count
-    $limit = if ($_.Extension -eq '.html') { 180 } else { 250 }
-    if ($n -gt $limit) { Write-Error "$($_.FullName): $n > $limit" }
-  }
+.\scripts\check-file-length.ps1
 ```
 
-Cubre host routing, path routing, prioridad del host, `/api/*` en JSON, traversal con `403`, asset inexistente con `404`, SPA fallback, las cuatro políticas de caché y el presupuesto de líneas de los frontends. La auditoría del lanzador usa el mismo script con límite `120` para `public/index.html`.
+Cubre host routing, path routing, prioridad del host, `/api/*` en JSON, traversal con `403`, asset inexistente con `404`, SPA fallback y las políticas de caché. `check-file-length.ps1` aplica los límites al resto del repositorio y excluye `public/shared/vendor/` y la UI importada de `public/comprobantes/`; el redirect `public/index.html` queda dentro del límite de 120 líneas.
 
 ## 11. Rutas y contratos HTTP
 
@@ -1542,6 +1545,7 @@ Además del test `internal/reportes/architecture_test.go`, que cierra los import
 | Go de pruebas (`*_test.go`) | Máximo 220 líneas. |
 | HTML | Máximo 180 líneas. |
 | JavaScript y CSS | Máximo 250 líneas, excluyendo `public/shared/vendor/`. |
+| UI Glauk2 (`public/comprobantes/**/*.html`, `*.js`) | Exenta: paridad visual 1:1 con `glauk2`; no se recorta. |
 
 `check-architecture.ps1` falla con código 1 si detecta: imports de pgx, perfiles, comprobantes, tasas, Postgres o Evolution desde `reportes` raíz/http; lectura de entorno fuera de `platform/config`; construcción de `pgxpool` fuera de `cmd/server` o `platform/postgres`; escrituras a `perfiles_glaukov` fuera de `internal/perfiles`; imports de dominios desde `platform/*`; o SQL en el dominio `reportes` (los adaptadores están excluidos). Los tests no se escanean como producción.
 
@@ -1881,17 +1885,18 @@ Los HTML de los paneles reciben además:
 
 ```text
 default-src 'self';
-img-src 'self' data: blob:;
-script-src 'self';
+img-src 'self' data: blob: https:;
+script-src 'self' 'unsafe-eval';
 style-src 'self' 'unsafe-inline';
 font-src 'self' data:;
 connect-src 'self';
+frame-src https://tasas.jairokov.com https://perfiles.jairokov.com;
 frame-ancestors 'none';
 base-uri 'self';
 form-action 'self'
 ```
 
-No hay CDNs, scripts inline ni `eval`. `style-src 'unsafe-inline'` se conserva mientras los paneles usen estilos calculados; cualquier cambio debe probar los cuatro paneles. La API no sirve HTML y no necesita CSP.
+No hay CDNs ni scripts inline. `script-src 'unsafe-eval'` es necesario porque Alpine.js evalúa expresiones declarativas y `html2canvas` las usa internamente. `img-src https:` permite los comprobantes alojados fuera del origen; `frame-src` se limita a los visores de Tasas/Perfiles. `style-src 'unsafe-inline'` se conserva porque Alpine y Tailwind aplican estilos calculados. Cualquier cambio de CSP debe probar la UI Glauk2 completa y los shells de compatibilidad. La API no sirve HTML y no necesita CSP.
 
 CORS:
 
