@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#030611">
+  <meta name="description" content="Atenea: comprobantes, liquidaciones, directorio y reportes.">
+  <title>Atenea · Comprobantes</title>
+  <link rel="icon" type="image/svg+xml" href="../shared/brand/favicon.svg">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="../shared/css/base.css">
+  <link rel="stylesheet" href="../shared/css/components.css">
+  <link rel="stylesheet" href="../shared/css/print.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../">
+          <img src="../shared/brand/logo-fundablock.png" alt="FUNDABLOCK">
+          <span><strong>Atenea</strong><small>COMPROBANTES</small></span>
+        </a>
+        <nav class="tabs" aria-label="Secciones de Comprobantes">
+          <button class="tab active" type="button" data-view="comprobantes">Comprobantes</button>
+          <button class="tab" type="button" data-view="directorio">Directorio</button>
+          <button class="tab" type="button" data-view="reportes">Reportes</button>
+          <button class="tab" type="button" data-view="admin">Admin</button>
+        </nav>
+        <span class="badge badge-green" id="comprobantes-count">0 registros</span>
+      </div>
+    </header>
+
+    <main class="container page stack">
+      <section class="view stack" id="view-comprobantes">
+        <div class="card">
+          <div class="card-head"><div><h2>Auditoría de comprobantes</h2><p class="small">Filtre, revise y corrija los movimientos procesados.</p></div><button class="btn btn-secondary btn-sm" id="btn-refrescar" type="button">Actualizar</button></div>
+          <form class="card-body stack" id="filtros-form">
+            <div class="grid cols-3">
+              <label class="field"><span class="label">Socio</span><input class="input" id="filtro-socio" placeholder="Nombre del socio"></label>
+              <label class="field"><span class="label">Rol</span><input class="input" id="filtro-rol" placeholder="ADMIN, SOCIO…"></label>
+              <label class="field"><span class="label">Buscar hash</span><input class="input" id="filtro-hash" placeholder="Hash largo o corto"></label>
+              <label class="field"><span class="label">Desde</span><input class="input" id="filtro-desde" type="date"></label>
+              <label class="field"><span class="label">Hasta</span><input class="input" id="filtro-hasta" type="date"></label>
+              <label class="field"><span class="label">Orden</span><select class="select" id="filtro-orden"><option value="fecha_desc">Más reciente</option><option value="fecha_asc">Más antiguo</option></select></label>
+            </div>
+            <div class="row between"><span class="small muted" id="filtros-estado">Sin filtros aplicados.</span><div class="row"><button class="btn btn-ghost btn-sm" id="btn-limpiar-filtros" type="button">Limpiar</button><button class="btn btn-primary btn-sm" type="submit">Aplicar filtros</button></div></div>
+          </form>
+        </div>
+        <div class="kpis" id="comprobantes-kpis"></div>
+        <div class="card">
+          <div class="table-wrap">
+            <table><thead><tr><th>Fecha</th><th>Socio</th><th>Operación</th><th>Monto</th><th>Hash</th><th>Estado IA</th><th>Acciones</th></tr></thead><tbody id="comprobantes-tabla"></tbody></table>
+          </div>
+          <div class="card-foot"><span class="small muted" id="comprobantes-pie">0 movimientos</span><button class="btn btn-secondary btn-sm" id="btn-mas" type="button">Ver más</button></div>
+        </div>
+      </section>
+
+      <section class="view hidden stack" id="view-directorio">
+        <div class="card">
+          <div class="card-head"><div><h2>Directorio de socios</h2><p class="small">Consulta rápida de perfiles activos.</p></div><button class="btn btn-secondary btn-sm" id="btn-refrescar-directorio" type="button">Actualizar</button></div>
+          <div class="card-body stack">
+            <div class="field"><label class="label" for="directorio-busqueda">Buscar</label><input class="input" id="directorio-busqueda" placeholder="Nombre, rol o moneda"></div>
+            <div class="table-wrap"><table><thead><tr><th>Socio</th><th>Rol</th><th>Moneda base</th><th>Monedas activas</th><th>Estado</th></tr></thead><tbody id="directorio-tabla"></tbody></table></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view hidden stack" id="view-reportes">
+        <div class="card">
+          <div class="card-head"><div><h2>Reporte visual</h2><p class="small">Render local 1080×1350 y envío como JPEG.</p></div><span class="badge badge-amber" id="reporte-badge">Sin generar</span></div>
+          <form class="card-body stack" id="reporte-form">
+            <div class="grid cols-4">
+              <label class="field"><span class="label">Socio</span><select class="select" id="reporte-socio"></select></label>
+              <label class="field"><span class="label">Desde</span><input class="input" id="reporte-desde" type="date"></label>
+              <label class="field"><span class="label">Hasta</span><input class="input" id="reporte-hasta" type="date"></label>
+              <label class="field"><span class="label">Lote</span><input class="input" id="reporte-lote" placeholder="T000"></label>
+            </div>
+            <label class="field"><span class="label">Pie de mensaje</span><input class="input" id="reporte-caption" maxlength="1024" placeholder="Resumen de operaciones"></label>
+            <div class="row"><button class="btn btn-primary" id="btn-generar-reporte" type="button">Generar JPEG</button><button class="btn btn-success" id="btn-enviar-reporte" type="button" disabled>Enviar por WhatsApp</button><button class="btn btn-secondary" id="btn-descargar-reporte" type="button" disabled>Descargar</button></div>
+          </form>
+          <div class="card-body"><div class="preview-frame" id="reporte-preview"><div class="empty">Aún no se ha generado un reporte.</div></div><p class="small muted" id="reporte-resultado"></p></div>
+        </div>
+        <div class="offscreen" id="reporte-render-wrap"><article class="reporte-sheet" id="reporte-render"></article></div>
+      </section>
+
+      <section class="view hidden stack" id="view-admin">
+        <div class="card">
+          <div class="card-head"><div><h2>Consola administrativa</h2><p class="small">La clave vive en sessionStorage y nunca viaja en la URL.</p></div><span class="badge badge-red" id="admin-estado">Sin autenticar</span></div>
+          <div class="card-body stack">
+            <div class="row">
+              <div class="field grow"><label class="label" for="admin-key">Clave administrativa</label><input class="input" id="admin-key" type="password" autocomplete="off"></div>
+              <button class="btn btn-primary" id="btn-admin-key" type="button">Guardar clave</button>
+              <button class="btn btn-ghost" id="btn-admin-clear" type="button">Olvidar</button>
+              <button class="btn btn-secondary" id="btn-admin-refrescar" type="button">Consultar cola</button>
+            </div>
+            <div class="table-wrap"><table><thead><tr><th>Hash</th><th>Socio 1</th><th>Socio 2</th><th>Estado</th><th>Conteo</th><th>Acciones</th></tr></thead><tbody id="admin-tabla"></tbody></table></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer"><div class="container row between"><span>Atenea · Glauk</span><span>Assets locales · sin CDN</span></div></footer>
+  </div>
+  <div id="modal-root"></div>
+  <div class="toast-host" id="toast-host" aria-live="polite"></div>
+  <script src="../shared/vendor/html2canvas.min.js"></script>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

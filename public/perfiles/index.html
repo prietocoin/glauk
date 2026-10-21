@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#030611">
+  <meta name="description" content="PerfilHub: directorio de socios, reglas y plantillas.">
+  <title>PerfilHub · Directorio de socios</title>
+  <link rel="icon" type="image/svg+xml" href="../shared/brand/favicon.svg">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="../shared/css/base.css">
+  <link rel="stylesheet" href="../shared/css/components.css">
+  <link rel="stylesheet" href="../shared/css/print.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../">
+          <img src="../shared/brand/logo-fundablock.png" alt="FUNDABLOCK">
+          <span><strong>PerfilHub</strong><small>DIRECTORIO DE SOCIOS</small></span>
+        </a>
+        <nav class="tabs" aria-label="Secciones de Perfiles">
+          <button class="tab active" type="button" data-view="directorio">Directorio</button>
+          <button class="tab" type="button" data-view="editor">Editor</button>
+          <button class="tab" type="button" data-view="plantilla">Plantilla</button>
+        </nav>
+        <span class="badge badge-purple" id="perfiles-count">0 socios</span>
+      </div>
+    </header>
+
+    <main class="container page stack">
+      <section class="view stack" id="view-directorio">
+        <div class="card">
+          <div class="card-head">
+            <div><h2>Directorio maestro</h2><p class="small">Reglas por país, moneda base y actividad publicada.</p></div>
+            <div class="row">
+              <button class="btn btn-secondary btn-sm" id="btn-refrescar" type="button">Actualizar</button>
+              <button class="btn btn-accent btn-sm" id="btn-nuevo" type="button">Nuevo socio</button>
+            </div>
+          </div>
+          <div class="card-body stack">
+            <div class="row">
+              <div class="field grow"><label class="label" for="perfiles-busqueda">Buscar</label><input class="input" id="perfiles-busqueda" placeholder="Nombre, rol, grupo o moneda"></div>
+              <div class="field"><label class="label" for="perfiles-filtro">Estado</label><select class="select" id="perfiles-filtro"><option value="">Todos</option><option value="activo">Activos</option><option value="inactivo">Inactivos</option></select></div>
+            </div>
+            <div class="kpis" id="perfiles-resumen"></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Socio</th><th>Rol</th><th>Moneda base</th><th>Monedas</th><th>Estado</th><th>Acciones</th></tr></thead>
+                <tbody id="perfiles-tabla"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view hidden stack" id="view-editor">
+        <div class="card">
+          <div class="card-head"><div><h2 id="editor-titulo">Editar socio</h2><p class="small">Los cambios se guardan en perfiles_glaukov.</p></div><span class="badge badge-accent" id="editor-badge">Nuevo</span></div>
+          <form class="card-body stack" id="perfil-form">
+            <div class="grid cols-3">
+              <label class="field"><span class="label">Nombre</span><input class="input" id="editor-nombre" required></label>
+              <label class="field"><span class="label">ID de grupo / JID</span><input class="input" id="editor-grupo"></label>
+              <label class="field"><span class="label">Rol</span><input class="input" id="editor-rol" placeholder="SOCIO"></label>
+              <label class="field"><span class="label">Moneda base</span><input class="input" id="editor-base" placeholder="USDT"></label>
+              <label class="field"><span class="label">Saldo inicial</span><input class="input" id="editor-saldo" type="number" step="0.01" value="0"></label>
+              <label class="field"><span class="label">Herencia</span><span class="check"><input type="checkbox" id="editor-herencia"> Heredar reglas del grupo</span></label>
+            </div>
+            <div class="card-head" style="padding:0;border:0"><div><h3>Monedas y márgenes</h3><p class="small">Porcentaje de depósito suma; pago resta.</p></div></div>
+            <div class="grid cols-3" id="monedas-grid"></div>
+            <div class="row between">
+              <button class="btn btn-secondary" id="btn-cancelar-editor" type="button">Cancelar</button>
+              <button class="btn btn-success" type="submit">Guardar socio</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="view hidden stack" id="view-plantilla">
+        <div class="card">
+          <div class="card-head"><div><h2>Plantilla de visibilidad</h2><p class="small">Congela o restaura qué socios publican tasas.</p></div></div>
+          <div class="card-body stack">
+            <div class="panel stack"><strong>Estado actual</strong><span class="small muted" id="plantilla-estado">Consulte el directorio para ver el estado.</span></div>
+            <div class="row">
+              <button class="btn btn-primary" id="btn-memorizar" type="button">Memorizar plantilla</button>
+              <button class="btn btn-success" id="btn-restaurar" type="button">Restaurar plantilla</button>
+              <button class="btn btn-danger" id="btn-apagar-todos" type="button">Apagar todos</button>
+            </div>
+            <p class="small muted">GENERAL permanece activo. La plantilla no cambia los porcentajes ni las monedas de cada socio.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer"><div class="container row between"><span>PerfilHub · Glauk</span><span>Assets locales</span></div></footer>
+  </div>
+  <div id="modal-root"></div>
+  <div class="toast-host" id="toast-host" aria-live="polite"></div>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

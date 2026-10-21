@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#030611">
+  <meta name="description" content="TasasHub: monitor global, lotes, socios y borrador HOO.">
+  <title>TasasHub · Control global</title>
+  <link rel="icon" type="image/svg+xml" href="../shared/brand/favicon.svg">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="../shared/css/base.css">
+  <link rel="stylesheet" href="../shared/css/components.css">
+  <link rel="stylesheet" href="../shared/css/print.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../">
+          <img src="../shared/brand/logo-fundablock.png" alt="FUNDABLOCK">
+          <span><strong>TasasHub</strong><small>CONTROL GLOBAL</small></span>
+        </a>
+        <nav class="tabs" aria-label="Secciones de Tasas">
+          <button class="tab active" type="button" data-view="monitor">Monitor</button>
+          <button class="tab" type="button" data-view="lotes">Lotes</button>
+          <button class="tab" type="button" data-view="socios">Socios</button>
+          <button class="tab" type="button" data-view="hoo">HOO</button>
+        </nav>
+        <div class="row">
+          <span class="badge badge-green" id="lote-badge">T000</span>
+          <button class="btn btn-secondary btn-sm hidden" id="btn-install" type="button">Instalar app</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container page stack">
+      <section class="view stack" id="view-monitor">
+        <div class="card">
+          <div class="card-head">
+            <div><h2>Monitor global</h2><p class="small">Lote vigente y borrador de tasas.</p></div>
+            <div class="row">
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-monitor" type="button">Actualizar</button>
+              <button class="btn btn-secondary btn-sm" id="btn-ir-lotes" type="button">Gestionar lotes</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="grid cols-6" id="tasas-grid"></div>
+          </div>
+          <div class="card-foot">
+            <label class="check"><input type="checkbox" id="modo-prueba" checked> Modo prueba</label>
+            <div class="row">
+              <button class="btn btn-success" id="btn-guardar-lote" type="button">Guardar lote</button>
+              <button class="btn btn-warning" id="btn-publicar-lote" type="button">Publicar a socios</button>
+              <button class="btn btn-secondary" id="btn-traer-hoo" type="button">Traer HOO</button>
+              <button class="btn btn-secondary" id="btn-remesas" type="button">Notificar remesas</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view hidden stack" id="view-lotes">
+        <div class="card">
+          <div class="card-head">
+            <div><h2>Lotes publicados</h2><p class="small">Historial y eliminación de un lote.</p></div>
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-lotes" type="button">Actualizar</button>
+          </div>
+          <div class="card-body stack">
+            <div class="row">
+              <div class="field grow"><label class="label" for="lote-id">ID de lote</label><input class="input" id="lote-id" placeholder="T000"></div>
+              <button class="btn btn-danger" id="btn-eliminar-lote" type="button">Eliminar lote</button>
+            </div>
+            <div class="table-wrap">
+              <table><thead><tr><th>Lote</th><th>Monedas</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody id="lotes-tabla"></tbody></table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view hidden stack" id="view-socios">
+        <div class="card">
+          <div class="card-head">
+            <div><h2>Checklist de socio</h2><p class="small">Monedas, estado y cartelera.</p></div>
+            <div class="row">
+              <button class="btn btn-secondary btn-sm" id="btn-cartelera" type="button">Ver cartelera</button>
+              <button class="btn btn-primary btn-sm" id="btn-disparar" type="button">Disparar socio</button>
+            </div>
+          </div>
+          <div class="card-body stack">
+            <div class="field"><label class="label" for="socio-select">Socio</label><select class="select" id="socio-select"></select></div>
+            <div id="socio-detalle"></div>
+          </div>
+          <div class="card-foot">
+            <span class="small muted" id="socio-estado">Seleccione un socio.</span>
+            <button class="btn btn-success" id="btn-guardar-socio" type="button">Guardar cambios</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="view hidden stack" id="view-hoo">
+        <div class="card">
+          <div class="card-head"><div><h2>Borrador HOO</h2><p class="small">Propuesta externa antes de guardar.</p></div></div>
+          <div class="card-body stack">
+            <pre class="panel mono small" id="hoo-estado">Sin consultar.</pre>
+            <div class="field"><label class="label" for="hoo-json">Borrador JSON</label><textarea class="textarea mono" id="hoo-json" spellcheck="false"></textarea></div>
+            <div class="row"><button class="btn btn-primary" id="btn-hoo-actualizar" type="button">Consultar HOO</button><button class="btn btn-success" id="btn-hoo-aplicar" type="button">Aplicar al monitor</button></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer"><div class="container row between"><span>TasasHub · Glauk</span><span>Assets locales</span></div></footer>
+  </div>
+  <div id="modal-root"></div>
+  <div class="toast-host" id="toast-host" aria-live="polite"></div>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

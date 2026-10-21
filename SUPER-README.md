@@ -875,7 +875,7 @@ El frontend de construcción de reportes y la superficie HTTP del dominio se com
 
 ## 10. Frontends y routing estático
 
-> Fase 5 implementada: `internal/platform/httpx` resuelve host/prefijo, sirve assets con caché diferenciada y aplica el SPA fallback. Los shells reales de cada panel se incorporan en las fases de frontend; el contrato de aislamiento ya está activo.
+> Fases 5 y 11 implementadas: `internal/platform/httpx` resuelve host/prefijo, sirve assets con caché diferenciada y aplica el SPA fallback. Los cuatro paneles usan shells mínimos, módulos ES atómicos y assets locales; el render de reportes ocurre en el navegador.
 
 ### 10.1 Tabla de tenants
 
@@ -942,14 +942,78 @@ Los hosts reales se configuran con `TENANT_*_HOSTS` (CSV, sin puerto). Se admite
 - El service worker se registra con el scope del tenant y **no** intercepta `/api/`; las mutaciones y los reportes nunca quedan atrapados offline.
 - `/shared/*` es común a todos los paneles; los assets de cada tenant viven bajo `public/<tenant>/`.
 
-### 10.6 Verificación
+### 10.6 Estructura modular (Fase 11)
+
+```text
+public/
+├── index.html                  lanzador neutro (DEFAULT_TENANT=none)
+├── robots.txt                  Disallow: /api/
+├── shared/
+│   ├── brand/                  logo FUNDABLOCK y favicon local
+│   ├── css/                    base.css, components.css, print.css
+│   ├── js/                     http, dom, format, toast, auth, reporte-canvas
+│   └── vendor/                 html2canvas 1.4.1 (MIT, copia local)
+├── tasas/                      shell, manifest.json, sw.js, js/{main,api,views,components}
+├── perfiles/                   shell, manifest.json, sw.js, js/{main,api,views}
+├── comprobantes/               shell, manifest.json, sw.js, js/{main,api,views,components}
+└── reportes/                   shell, manifest.json, sw.js, js/{main,api,views,components}
+```
+
+Cada shell contiene solo estructura y puntos de montaje. La navegación, el estado y las llamadas viven en módulos ES; los componentes reutilizables se importan con rutas relativas. Los límites son 180 líneas por HTML (120 para el lanzador), 250 por módulo JS/CSS y exclusión total de `shared/vendor/` del presupuesto. Los formularios y acciones se enlazan con `addEventListener`; no se usan scripts inline.
+
+### 10.7 Política de assets y CSP
+
+- Todos los assets de un tenant se referencian de forma relativa: `../shared/css/base.css`, `./js/main.js`, `../shared/vendor/html2canvas.min.js`. La misma shell funciona en modo host (`/`) y en modo path (`/tasas/`, `/perfiles/`, `/comprobantes/`, `/reportes/`).
+- Las llamadas de negocio siguen siendo absolutas y canónicas: `/api/v1/tasas/*`, `/api/v1/perfiles/*`, `/api/v1/comprobantes/*`, `/api/v1/reportes/*` y `/api/v1/admin/*`.
+- No hay dependencias de CDN en tiempo de ejecución. Las fuentes, el logo, el favicon y `html2canvas` se sirven desde `public/shared/`. El vendor se valida por versión y licencia, no por longitud.
+- El lanzador `public/index.html` solo se sirve en `/` cuando `DEFAULT_TENANT=none`; enlaza a los cuatro portales sin JavaScript.
+- `public/robots.txt` bloquea explícitamente `/api/`.
+
+### 10.8 Service workers y aislamiento
+
+Cada SPA registra `../sw.js` resolviendo su URL con `import.meta.url` y declara el scope del tenant:
+
+```js
+const script = new URL('../sw.js', import.meta.url);
+const scope = new URL('../', import.meta.url).pathname;
+navigator.serviceWorker.register(script, { scope });
+```
+
+En modo path el scope es `/tasas/`, `/perfiles/`, `/comprobantes/` o `/reportes/`; en modo host es `/`. El handler `fetch` solo atiende `GET` del mismo origen y sale inmediatamente para `/api` y `/api/*`: las mutaciones, la sesión y los envíos de reportes nunca se cachean ni se sirven desde una copia offline. El shell y los assets estáticos se precargan; una navegación sin red usa el `index.html` del tenant.
+
+### 10.9 Pipeline de canvas
+
+`public/shared/js/reporte-canvas.js` implementa `generarReporteJPEG` con el contrato de §3.6.1:
+
+| Regla | Implementación |
+|---|---|
+| Lienzo lógico | `1080 × 1350` px |
+| Escala física | `Math.min(devicePixelRatio, 2)` |
+| Fondo | `#FFFFFF`, sin transparencia |
+| Formato | `canvas.toBlob('image/jpeg', quality)` |
+| Calidad inicial | `0.90` |
+| Límite de tamaño | `8 * 1024 * 1024` bytes |
+| Reducción | baja de `0.05` hasta `0.60`; si aún excede, error visible |
+| Retorno | `{ blob, base64 }` |
+
+El panel construye el reporte en un `article.reporte-sheet` fuera de pantalla, espera `document.fonts.ready`, prepara las imágenes locales y rasteriza con el `html2canvas` vendorizado. El backend recibe únicamente el JPEG en base64; nunca HTML. Los envíos usan `Idempotency-Key` generado en el navegador y conservado mientras el reintento no confirme éxito.
+
+### 10.10 Verificación
 
 ```powershell
 $env:CGO_ENABLED = "1"
 go test ./internal/platform/httpx -race -v
+
+Get-ChildItem ".\public" -Recurse -Include *.html,*.js,*.css |
+  Where-Object { $_.FullName -notmatch '\\vendor\\' } |
+  ForEach-Object {
+    $n = (Get-Content $_.FullName).Count
+    $limit = if ($_.Extension -eq '.html') { 180 } else { 250 }
+    if ($n -gt $limit) { Write-Error "$($_.FullName): $n > $limit" }
+  }
 ```
 
-Cubre host routing, path routing, prioridad del host, `/api/*` en JSON, traversal con `403`, asset inexistente con `404`, SPA fallback y las cuatro políticas de caché.
+Cubre host routing, path routing, prioridad del host, `/api/*` en JSON, traversal con `403`, asset inexistente con `404`, SPA fallback, las cuatro políticas de caché y el presupuesto de líneas de los frontends. La auditoría del lanzador usa el mismo script con límite `120` para `public/index.html`.
 
 ## 11. Rutas y contratos HTTP
 

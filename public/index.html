@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Glauk: una sola plataforma para tasas, perfiles, comprobantes y reportes.">
+  <meta name="theme-color" content="#030611">
+  <title>Glauk · Acceso a portales</title>
+  <link rel="icon" type="image/svg+xml" href="./shared/brand/favicon.svg">
+  <link rel="stylesheet" href="./shared/css/base.css">
+  <link rel="stylesheet" href="./shared/css/components.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="./">
+          <img src="./shared/brand/logo-fundablock.png" alt="FUNDABLOCK">
+          <span><strong>FUNDABLOCK</strong><small>GLAUKOV ENGINE</small></span>
+        </a>
+        <span class="badge badge-accent">Acceso unificado</span>
+      </div>
+    </header>
+
+    <main class="container page stack">
+      <section class="stack">
+        <div>
+          <h1>Un solo lugar para operar la red</h1>
+          <p class="muted">Seleccione el portal que necesita. Cada módulo conserva su propio espacio, su caché y su service worker.</p>
+        </div>
+        <div class="grid cols-2">
+          <article class="card">
+            <div class="card-body stack">
+              <span class="badge badge-accent">Tasas</span>
+              <h2>Monitor y carteleras</h2>
+              <p>Lotes, socios, borrador HOO y publicación de tasas.</p>
+              <a class="btn btn-accent" href="./tasas/">Abrir Tasas</a>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-body stack">
+              <span class="badge badge-purple">Perfiles</span>
+              <h2>Directorio de socios</h2>
+              <p>Reglas por país, monedas, herencia y plantillas.</p>
+              <a class="btn btn-primary" href="./perfiles/">Abrir Perfiles</a>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-body stack">
+              <span class="badge badge-green">Comprobantes</span>
+              <h2>Auditoría en vivo</h2>
+              <p>Movimientos, liquidación, directorio y consola administrativa.</p>
+              <a class="btn btn-success" href="./comprobantes/">Abrir Comprobantes</a>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-body stack">
+              <span class="badge badge-amber">Reportes</span>
+              <h2>Constructor visual</h2>
+              <p>Filtros, plantillas y JPEG listo para WhatsApp.</p>
+              <a class="btn btn-warning" href="./reportes/">Abrir Reportes</a>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container row between">
+        <span>Glauk · operación modular</span>
+        <span>Sin CDN · assets locales</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>
