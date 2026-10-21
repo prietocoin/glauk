@@ -22,6 +22,9 @@ coverage.out
 *.test
 *.prof
 
+# Evidencia local de auditoria
+/audit-pre-cutover.csv
+
 # Editores
 .idea/
 .vscode/

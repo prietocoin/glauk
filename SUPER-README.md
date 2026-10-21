@@ -1613,7 +1613,98 @@ Evolution caída, base lenta, JID inválido, imagen rechazada, doble envío y fu
 
 ## 17. Migración y compatibilidad
 
-Fases, alias, deprecación, cutover, rollback y lecciones del legado.
+Glauk se incorpora sobre datos heredados sin una migración masiva ni destructiva. La regla de esta fase es **auditar primero, corregir con revisión humana y recién después abrir tráfico real**. El servicio viejo se mantiene disponible en modo lectura durante siete días y el esquema nuevo es aditivo: una columna nullable y sus índices.
+
+### 17.1 Estado y contrato de compatibilidad
+
+| Elemento | Estado en el cutover |
+|---|---|
+| Código | Un solo módulo Go y un solo binario; las fases 1–15 están ejecutadas y la limpieza de la fase 16 queda pendiente. |
+| Tag de fase | `f15-cutover`. |
+| Rutas | Las rutas canónicas y sus alias están documentados en el Capítulo 11; los alias se retiran después de 30 días sin uso, no durante el cutover. |
+| Base de datos | `internal/comprobantes/migrations/0001_impactos_soft_delete.sql` es la única migración de referencia. Es idempotente y no borra filas. |
+| Migraciones automáticas | **No existen**. El binario no aplica DDL al arrancar; el operador ejecuta `psql` con backup verificado. |
+| `monedas` | El codec acepta las tres formas y escribe el superset en la primera escritura de cada socio; no se reescribe masivamente en fase 1. |
+| `id_grupo` | El placeholder `NOMBRE_JID` está prohibido; el default nuevo es vacío y Reportes rechaza JIDs inválidos antes de enviar. |
+| `old/` y `pgxmock` | `old/` se archiva en la fase 16, no se borra durante el cutover. `pgxmock` sigue mientras la suite no use exclusivamente PostgreSQL efímero. |
+
+Índice de migraciones y comandos: [`migrations/README.md`](migrations/README.md).
+
+### 17.2 Auditoría pre-cutover
+
+El SQL [`scripts/audit-pre-cutover.sql`](scripts/audit-pre-cutover.sql) reúne las consultas obligatorias de §1.7.4, incluida la validación estricta de JID de §3.4, y añade la discrepancia de actividad de §1.7.3. Se ejecuta en una transacción `READ ONLY`; no contiene `INSERT`, `UPDATE`, `DELETE` ni DDL.
+
+Ejecución directa:
+
+```powershell
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f .\scripts\audit-pre-cutover.sql
+```
+
+Reporte tabular con alerta y códigos de salida:
+
+```powershell
+.\scripts\audit-db.ps1 -Dsn $env:DATABASE_URL
+.\scripts\audit-db.ps1 -Dsn $env:DATABASE_URL -Detailed -CsvPath .\audit-pre-cutover.csv
+```
+
+Si no hay `psql` o DSN, el script no inventa resultados: cae en **simulación / parseo seguro**, muestra qué valida cada bloque y sale con código 2. `-Simulate` fuerza ese modo y sale con 0. Códigos: `0` auditoría limpia o simulación explícita, `1` hallazgos que requieren acción humana, `2` auditoría no ejecutada por falta de herramienta/DSN, `3` error de ejecución. Un bloque con error no se considera aprobado.
+
+| Bloque | Qué valida | Criterio de aprobación |
+|---:|---|---|
+| 01 | Duplicados de `UPPER(BTRIM(nombre))` en `perfiles_glaukov`. | Cero duplicados sin decisión documentada; el índice único debe poder crearse. |
+| 02 | JIDs vacíos, placeholders `*_JID`, legado `@c.us` o formato inválido. | Cada fila corregida a mano y revalidada con el regex de §3.4; no se inventan números. |
+| 03 | Formas `porcentaje`, `deposito` y `tipo` de `monedas`, y cuántas coexisten. | Cada conflicto resuelto por superset; `porcentaje` manda si los valores difieren. |
+| 04 | Discrepancia entre `mostrar.tasas` y `activo`. | Cada fila revisada y aprobada; `mostrar.tasas` es canónico y `activo` solo apaga. Si la columna no existe, se ignora. |
+| 05 | `tasas_glaukov.created_at` nulo o `id_tasa` fuera de `^T[0-9]{3}$`. | Lote corregido con backup antes de publicar. |
+| 06 | `comprobantes_raw` sin fila equivalente en `comprobantes_liq`. | Huérfano liquidado o justificado; la evidencia cruda no se borra. |
+
+El script `audit-db.ps1` ejecuta cada bloque dentro de `BEGIN TRANSACTION READ ONLY` y con `statement_timeout` acotado. `-Detailed` imprime las filas encontradas; `-CsvPath` guarda el resumen tabular para adjuntarlo a `DECISIONES.md`. Las filas y los JIDs son datos operativos: el reporte se comparte por canal restringido, no en tickets públicos.
+
+### 17.3 Checklist de cutover
+
+| Momento | Acción | Evidencia |
+|---|---|---|
+| D−7 | Congelar cambios de esquema, copiar producción a staging y ejecutar la auditoría completa. | Reporte CSV y `DECISIONES.md` con dueño de cada corrección. |
+| D−7 | Corregir JIDs y resolver duplicados, conflictos de monedas, actividad y huérfanos. | Segunda auditoría sin hallazgos no aprobados. |
+| D−7 | Probar con copia de producción y Evolution real usando `JID_GRUPO_PRUEBA`: una cartelera y un reporte con `messageId`. | Imagen, caption, destino y respuesta de Evolution verificados. |
+| D−1 | Aplicar la migración idempotente en staging y luego en producción, con backup previo. | `migrations/README.md` y consultas de verificación de columna/índices. |
+| D−1 | Definir ventana, TTL de DNS bajo y responsables de rollback. | Runbook y contactos. |
+| D0 | Bajar **escrituras** de los servicios viejos; verificar que no quedan colas ni workers Node/Redis/BullMQ. | Servicios viejos en modo lectura. |
+| D0 | Desplegar Glauk con el tag aprobado, verificar `/ready` 200 y ejecutar `scripts/smoke.ps1`. | Smoke verde y logs JSON sin secretos. |
+| D0 | Cambiar DNS/proxy al nuevo servicio y mantener el anterior caliente. | Tráfico nuevo en Glauk y old service disponible. |
+| D0 a D+72 h | Monitorear 5xx, latencia, envíos, duplicados, JIDs inválidos y los cuatro paneles. | Sin errores nuevos ni duplicados; métricas dentro de la línea base. |
+| D+7 d | Confirmar estabilidad, archivar evidencia y recién entonces planificar la retirada de los servicios viejos. | Sign-off de operación y negocio. |
+
+La aceptación del cutover es: **72 horas sin errores 5xx nuevos, sin envíos duplicados y con los cuatro paneles operativos**. Un hallazgo de auditoría no aprobado es un bloqueo, no una advertencia.
+
+### 17.4 Rollback inmediato
+
+El rollback de aplicación no requiere restaurar datos ni tocar el esquema:
+
+1. Devolver DNS/proxy al servicio viejo, que se mantuvo caliente y en modo lectura.
+2. Reactivar sus escrituras solo si el negocio lo aprueba; el esquema nuevo es compatible y la columna `eliminado_en` es nullable.
+3. En Easypanel, volver al deployment anterior; en local, desplegar el tag anterior (`f14-docker` o la imagen previa) y no borrar el volumen.
+4. Conservar el contenedor Glauk detenido con sus logs para diagnosticar; no ejecutar `docker compose down -v` ni borrar tablas.
+5. Restaurar `glauk-pre.dump` **solo** si hubo una escritura incompatible, con aprobación explícita y el servicio detenido. La migración de fase 15 no es destructiva.
+
+El objetivo es DNS en menos de 15 minutos, imagen anterior en menos de 10 minutos y restauración de base solo como último recurso. Un rollback de datos debe ser independiente del rollback de código; si no lo es, se replanifica.
+
+### 17.5 Criterios para resolver hallazgos
+
+- **Duplicados de nombre:** decidir con negocio cuál es el perfil canónico y corregir el nombre o fusionar la información; no borrar filas automáticamente. El resultado debe permitir el índice único por nombre canónico.
+- **JIDs:** corregir `id_grupo` en Perfiles con una persona responsable. Un placeholder `NOMBRE_JID` se reemplaza por vacío o por un JID verificado; nunca se inventa un número. `@c.us` se normaliza al formato actual. Se vuelve a ejecutar el bloque 02 hasta que no queden inválidos no aprobados.
+- **Monedas:** el superset es la forma de escritura. Si `porcentaje.deposito` y `deposito` difieren, gana `porcentaje` porque Tasas es el motor de cálculo; registrar el conflicto en `DECISIONES.md`. No se hace una migración masiva en fase 1: cada socio queda normalizado en su primera escritura.
+- **Actividad:** `mostrar.tasas` manda. `activo` solo puede apagar; una fila donde `activo` intente encender un perfil apagado se revisa y se aprueba o se corrige. Si `activo` no existe, no se inventa.
+- **Lotes:** `id_tasa` debe cumplir `^T[0-9]{3}$` y `created_at` no puede ser nulo. Cualquier corrección se hace con backup y se verifica con una lectura posterior.
+- **Huérfanos de liquidación:** liquidar el comprobante o documentar por qué no aplica. No se elimina `comprobantes_raw`: es la evidencia de origen.
+
+### 17.6 Lecciones del legado
+
+- No confiar en defaults silenciosos: `monedas` tenía tres formas y `activo` podía contradecir a `mostrar.tasas`.
+- No compartir JSONB sin un codec único: el superset se escribe en un solo dominio y los demás solo leen.
+- No hardcodear claves ni JIDs; los secretos viven fuera de la imagen y los placeholders se rechazan.
+- No ejecutar migraciones destructivas sin backup verificado y prueba de restauración en staging.
+- No retirar los servicios viejos el mismo día: siete días de lectura y 72 horas de métricas son la red de seguridad.
 
 ## 18. ADRs
 
