@@ -23,6 +23,7 @@ import (
 	"glauk/internal/reportes"
 	reporteshttp "glauk/internal/reportes/http"
 	tasashttp "glauk/internal/tasas/http"
+	tasasservice "glauk/internal/tasas/service"
 )
 
 type stubComprobantes struct{ comprobanteshttp.Service }
@@ -84,9 +85,10 @@ func testDependencies(t *testing.T) *Dependencies {
 	perfiles := perfileshttp.NewDeps(perfilesservice.New(nil, nil, nil))
 	return &Dependencies{
 		Config: cfg, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Health:       func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
-		Ready:        func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
-		Tasas:        &tasashttp.Deps{},
+		Health: func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
+		Ready:  func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
+		Tasas: tasashttp.NewDeps(
+			tasasservice.New(fakeTasasQuerier{}, nil, cfg), nil, time.Now),
 		Perfiles:     perfiles,
 		Comprobantes: comprobanteshttp.NewDeps(stubComprobantes{}, cfg),
 		Reportes:     reporteshttp.NewHandler(module),
@@ -191,6 +193,13 @@ func TestUnknownAPIStaysJSON(t *testing.T) {
 	resp, body := request(t, app, nethttp.MethodGet, "/api/no-existe")
 	if resp.StatusCode != 404 || !strings.Contains(resp.Header.Get("Content-Type"), "json") {
 		t.Fatalf("API desconocida = %d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatalf("404 de API no es JSON: %v", err)
+	}
+	if envelope["success"] != false || envelope["code"] != "NOT_FOUND" {
+		t.Fatalf("404 de API con envelope inesperado: %v", envelope)
 	}
 	if strings.Contains(string(body), "panel") {
 		t.Fatalf("el 404 de API cayó al SPA: %s", body)

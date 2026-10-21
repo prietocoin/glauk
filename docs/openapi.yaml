@@ -1,0 +1,1737 @@
+openapi: 3.1.0
+info:
+  title: Glauk API v1
+  version: 1.0.0
+  summary: Superficie HTTP canónica del runtime Glauk.
+  description: |
+    Contrato público de la API canónica de Glauk. Solo documenta `/health`,
+    `/ready` y las rutas `/api/v1/*`; los alias históricos de §5.7 se mantienen
+    por compatibilidad, pero no forman parte de esta especificación.
+  contact:
+    name: Glauk
+  license:
+    name: Propietario
+servers:
+  - url: http://localhost:3000
+    description: Desarrollo local
+  - url: https://api.glauk.com
+    description: Producción
+security: []
+tags:
+  - name: Health
+    description: Sondas públicas de vida y disponibilidad.
+  - name: Tasas
+    description: Cálculo, publicación y render de carteleras.
+  - name: Perfiles
+    description: Socios, monedas y reglas de actividad H-02.
+  - name: Comprobantes
+    description: Auditoría, liquidación y snapshots financieros.
+  - name: Reportes
+    description: Filtros y envío de imágenes o texto por WhatsApp.
+  - name: Admin
+    description: Consola administrativa de la cola raw.
+paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Estado del servicio
+      description: Comprueba PostgreSQL y Evolution. Responde 503 si la base no está disponible.
+      security: []
+      responses:
+        '200':
+          description: Servicio disponible.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: Servicio degradado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /ready:
+    get:
+      tags: [Health]
+      operationId: getReady
+      summary: Disponibilidad para recibir tráfico
+      description: Variante reducida de `/health`; omite versión e instancia de Evolution.
+      security: []
+      responses:
+        '200':
+          description: Servicio listo.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: Servicio no listo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /api/v1/tasas/monitor:
+    get:
+      tags: [Tasas]
+      operationId: getTasasMonitor
+      summary: Lote de tasas vigente
+      responses:
+        '200':
+          description: Monitor de mercado con el último lote guardado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorResponse'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/tasas/socios:
+    get:
+      tags: [Tasas]
+      operationId: getTasasSocios
+      summary: Socios con configuración de tasas
+      responses:
+        '200':
+          description: Lista normalizada de socios.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SociosResponse'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/tasas/hoo-borrador:
+    get:
+      tags: [Tasas]
+      operationId: getHooBorrador
+      summary: Borrador de tasas del origen HOO
+      responses:
+        '200':
+          description: Borrador propuesto para revisión.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HooResponse'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/tasas/socios/{socio}:
+    put:
+      tags: [Tasas]
+      operationId: putTasasSocio
+      summary: Actualiza la configuración de un socio
+      security:
+        - {}
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SocioPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutSocioRequest'
+      responses:
+        '200':
+          description: Socio actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocioResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/tasas/guardar-lote:
+    post:
+      tags: [Tasas]
+      operationId: postTasasGuardarLote
+      summary: Guarda un lote de tasas
+      security:
+        - {}
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuardarLoteRequest'
+      responses:
+        '200':
+          description: Lote guardado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/tasas/publicar-lote:
+    post:
+      tags: [Tasas]
+      operationId: postTasasPublicarLote
+      summary: Publica el lote vigente
+      security:
+        - {}
+        - ApiKeyAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicarRequest'
+      responses:
+        '200':
+          description: Publicación procesada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicacionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/tasas/notificar-remesas:
+    post:
+      tags: [Tasas]
+      operationId: postTasasNotificarRemesas
+      summary: Registra la notificación de remesas
+      security:
+        - {}
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Notificación registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificacionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/tasas/calcular/{socio}:
+    get:
+      tags: [Tasas]
+      operationId: getTasasCalcular
+      summary: Cartelera calculada de un socio
+      parameters:
+        - $ref: '#/components/parameters/SocioPath'
+      responses:
+        '200':
+          description: Cartelera normalizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarteleraResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/tasas/render/{socio}:
+    get:
+      tags: [Tasas]
+      operationId: getTasasRenderSocio
+      summary: Renderiza la cartelera de un socio
+      parameters:
+        - $ref: '#/components/parameters/SocioPath'
+      responses:
+        '200':
+          description: PNG de la cartelera.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/PlainNotFound'
+        '500':
+          $ref: '#/components/responses/PlainInternal'
+  /api/v1/tasas/render:
+    post:
+      tags: [Tasas]
+      operationId: postTasasRender
+      summary: Renderiza una cartelera desde el cuerpo
+      security:
+        - {}
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenderRequest'
+      responses:
+        '200':
+          description: PNG de la cartelera.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/PlainNotFound'
+        '500':
+          $ref: '#/components/responses/PlainInternal'
+  /api/v1/tasas/disparar:
+    post:
+      tags: [Tasas]
+      operationId: postTasasDisparar
+      summary: Dispara la cartelera de un socio
+      security:
+        - {}
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DispararRequest'
+      responses:
+        '200':
+          description: Resultado del envío.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispararResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/tasas/disparar-lote:
+    post:
+      tags: [Tasas]
+      operationId: postTasasDispararLote
+      summary: Publica el lote vigente a todos los socios activos
+      security:
+        - {}
+        - ApiKeyAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicarRequest'
+      responses:
+        '200':
+          description: Publicación procesada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicacionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/tasas/lote/{id_tasa}:
+    delete:
+      tags: [Tasas]
+      operationId: deleteTasasLote
+      summary: Elimina un lote de tasas
+      security:
+        - {}
+        - ApiKeyAuth: []
+      parameters:
+        - name: id_tasa
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^T[0-9]{3,}$'
+      responses:
+        '200':
+          description: Lote eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/perfiles:
+    get:
+      tags: [Perfiles]
+      operationId: getPerfiles
+      summary: Lista los perfiles
+      responses:
+        '200':
+          description: Array raíz de perfiles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Perfil'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/perfiles/activos:
+    get:
+      tags: [Perfiles]
+      operationId: getPerfilesActivos
+      summary: Lista los nombres publicables
+      responses:
+        '200':
+          description: Array raíz de nombres.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/perfiles/guardar:
+    post:
+      tags: [Perfiles]
+      operationId: postPerfilesGuardar
+      summary: Guarda o actualiza un perfil
+      security:
+        - {}
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuardarPerfilRequest'
+      responses:
+        '200':
+          description: Perfil guardado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/perfiles/apagar-todos:
+    post:
+      tags: [Perfiles]
+      operationId: postPerfilesApagarTodos
+      summary: Apaga todos los socios salvo GENERAL
+      security:
+        - {}
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Operación confirmada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/perfiles/plantilla/memorizar:
+    post:
+      tags: [Perfiles]
+      operationId: postPerfilesMemorizar
+      summary: Memoriza la plantilla de perfiles
+      security:
+        - {}
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Plantilla memorizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/perfiles/plantilla/restaurar:
+    post:
+      tags: [Perfiles]
+      operationId: postPerfilesRestaurar
+      summary: Restaura la plantilla de perfiles
+      security:
+        - {}
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Plantilla restaurada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/perfiles/{nombre}/estado:
+    patch:
+      tags: [Perfiles]
+      operationId: patchPerfilEstado
+      summary: Cambia la actividad de un perfil
+      security:
+        - {}
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NombrePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TogglePerfilRequest'
+      responses:
+        '200':
+          description: Perfil actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/perfiles/{nombre}:
+    delete:
+      tags: [Perfiles]
+      operationId: deletePerfil
+      summary: Elimina un perfil
+      security:
+        - {}
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NombrePath'
+      responses:
+        '200':
+          description: Perfil eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/comprobantes:
+    get:
+      tags: [Comprobantes]
+      operationId: getComprobantes
+      summary: Lista comprobantes con filtros
+      parameters:
+        - name: socio
+          in: query
+          schema: {type: string}
+        - name: rol
+          in: query
+          schema: {type: string}
+        - name: fechaInicio
+          in: query
+          schema: {type: string, format: date}
+        - name: fechaFin
+          in: query
+          schema: {type: string, format: date}
+        - name: hash
+          in: query
+          schema: {type: string}
+        - name: orden
+          in: query
+          schema:
+            type: string
+            enum: [fecha_asc, fecha_desc]
+            default: fecha_desc
+      responses:
+        '200':
+          description: Array raíz de comprobantes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Comprobante'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/comprobantes/liquidar:
+    post:
+      tags: [Comprobantes]
+      operationId: postComprobantesLiquidar
+      summary: Liquida un comprobante
+      security:
+        - {}
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LiquidarInput'
+      responses:
+        '200':
+          description: Liquidación registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiquidacionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/comprobantes/{hashLargo}/releer:
+    post:
+      tags: [Comprobantes]
+      operationId: postComprobanteReleer
+      summary: Marca un comprobante para reprocesamiento
+      security:
+        - {}
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HashLargoPath'
+      responses:
+        '200':
+          description: Reprocesamiento marcado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/comprobantes/{hashLargo}:
+    put:
+      tags: [Comprobantes]
+      operationId: putComprobante
+      summary: Actualiza un comprobante
+      security:
+        - {}
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HashLargoPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInput'
+      responses:
+        '200':
+          description: Comprobante actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiquidacionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+    delete:
+      tags: [Comprobantes]
+      operationId: deleteComprobante
+      summary: Elimina un comprobante
+      security:
+        - {}
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HashLargoPath'
+      responses:
+        '200':
+          description: Comprobante eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/comprobantes/tasas/ultimas:
+    get:
+      tags: [Comprobantes]
+      operationId: getComprobantesTasasUltimas
+      summary: Último lote de tasas para auditoría
+      responses:
+        '200':
+          description: Lote vigente o fallback T001.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoteTasa'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/comprobantes/tasas/historial:
+    get:
+      tags: [Comprobantes]
+      operationId: getComprobantesTasasHistorial
+      summary: Historial de lotes de tasas
+      responses:
+        '200':
+          description: Array de lotes, posiblemente vacío.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoteTasa'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/reportes/filtros:
+    get:
+      tags: [Reportes]
+      operationId: getReportesFiltros
+      summary: Filtros para el modal de reportes
+      parameters:
+        - name: rol
+          in: query
+          schema: {type: string}
+      responses:
+        '200':
+          description: Roles, entidades y hashes disponibles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportesFiltrosResponse'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/reportes/imagen:
+    post:
+      tags: [Reportes]
+      operationId: postReportesImagen
+      summary: Envía una imagen JPEG por WhatsApp
+      security:
+        - {}
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnviarImagenRequest'
+      responses:
+        '200':
+          description: Envío aceptado o idempotente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReporteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/Timeout'
+  /api/v1/reportes/texto:
+    post:
+      tags: [Reportes]
+      operationId: postReportesTexto
+      summary: Envía un texto por WhatsApp
+      security:
+        - {}
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnviarTextoRequest'
+      responses:
+        '200':
+          description: Envío aceptado o idempotente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReporteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/Timeout'
+  /api/v1/admin/cola:
+    get:
+      tags: [Admin]
+      operationId: getAdminCola
+      summary: Lista la cola administrativa
+      security:
+        - AdminKeyAuth: []
+      responses:
+        '200':
+          description: Cola raw, sin caché.
+          headers:
+            Cache-Control:
+              schema: {type: string, const: no-store}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminQueueResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/AdminDisabled'
+  /api/v1/admin/cola/{hashLargo}:
+    put:
+      tags: [Admin]
+      operationId: putAdminCola
+      summary: Actualiza un elemento de la cola
+      security:
+        - AdminKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HashLargoPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueueUpdateRequest'
+      responses:
+        '200':
+          description: Elemento actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AdminDisabled'
+    delete:
+      tags: [Admin]
+      operationId: deleteAdminCola
+      summary: Elimina un elemento de la cola
+      security:
+        - AdminKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HashLargoPath'
+      responses:
+        '200':
+          description: Elemento eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/AdminDisabled'
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Clave de mutaciones de dominio. Es opcional mientras SECURITY_API_KEY
+        esté vacía; en producción se recomienda exigirla.
+    AdminKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+      description: Clave obligatoria de la consola administrativa.
+  headers:
+    RequestId:
+      description: Identificador de la petición.
+      schema:
+        type: string
+  parameters:
+    SocioPath:
+      name: socio
+      in: path
+      required: true
+      schema:
+        type: string
+    NombrePath:
+      name: nombre
+      in: path
+      required: true
+      schema:
+        type: string
+    HashLargoPath:
+      name: hashLargo
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Petición inválida.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Clave ausente o inválida.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Recurso no encontrado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    PayloadTooLarge:
+      description: Cuerpo o imagen demasiado grandes.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnsupportedMedia:
+      description: Formato de imagen no soportado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unprocessable:
+      description: Datos válidos pero fuera de rango.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: Límite de envíos excedido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Internal:
+      description: Error interno controlado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    BadGateway:
+      description: Evolution no disponible.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Timeout:
+      description: Dependencia o contexto agotado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    AdminDisabled:
+      description: ADMIN_API_KEY no configurada.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    PlainNotFound:
+      description: Socio no encontrado.
+      content:
+        text/plain:
+          schema:
+            type: string
+    PlainInternal:
+      description: Error generando el PNG.
+      content:
+        text/plain:
+          schema:
+            type: string
+  schemas:
+    Error:
+      type: object
+      required: [success, error, code]
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          type: string
+        code:
+          type: string
+        requestId:
+          type: string
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+    MessageResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+        message:
+          type: string
+    Health:
+      type: object
+      required: [status, service, checks, uptime_s]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        service:
+          type: string
+          const: glauk
+        version:
+          type: string
+        uptime_s:
+          type: integer
+          format: int64
+        checks:
+          type: object
+          properties:
+            database:
+              $ref: '#/components/schemas/DatabaseCheck'
+            evolution:
+              $ref: '#/components/schemas/EvolutionCheck'
+    DatabaseCheck:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, error, unavailable]
+        latency_ms:
+          type: integer
+          format: int64
+    EvolutionCheck:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, simulated]
+        instance:
+          type: string
+    MonitorResponse:
+      type: object
+      required: [success, id_tasa, tasas]
+      properties:
+        success:
+          type: boolean
+          const: true
+        id_tasa:
+          type: string
+          example: T052
+        tasas:
+          type: object
+          additionalProperties:
+            type: number
+    SociosResponse:
+      type: object
+      required: [success, socios]
+      properties:
+        success:
+          type: boolean
+          const: true
+        socios:
+          type: array
+          items:
+            $ref: '#/components/schemas/TasasSocio'
+    TasasSocio:
+      type: object
+      properties:
+        nombre:
+          type: string
+        id_grupo:
+          type: string
+        moneda_base:
+          type: string
+        rol:
+          type: string
+        activo:
+          type: boolean
+        modo_prueba:
+          type: boolean
+        monedas:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/MonedaTasas'
+    MonedaTasas:
+      type: object
+      properties:
+        activo:
+          type: boolean
+        porcentaje:
+          type: object
+          properties:
+            deposito:
+              type: number
+            pago:
+              type: number
+    SocioResponse:
+      type: object
+      required: [success, socio]
+      properties:
+        success:
+          type: boolean
+          const: true
+        socio:
+          $ref: '#/components/schemas/TasasSocio'
+    PutSocioRequest:
+      type: object
+      properties:
+        monedas:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/MonedaTasas'
+        activo:
+          type: boolean
+        modo_prueba:
+          type: boolean
+        rol:
+          type: string
+    HooResponse:
+      type: object
+      required: [success, borrador]
+      properties:
+        success:
+          type: boolean
+          const: true
+        borrador:
+          type: object
+          additionalProperties: true
+    GuardarLoteRequest:
+      type: object
+      required: [tasas]
+      properties:
+        tasas:
+          type: object
+          additionalProperties:
+            type: [number, string]
+    LoteResponse:
+      type: object
+      required: [success, id_tasa, registro]
+      properties:
+        success:
+          type: boolean
+          const: true
+        id_tasa:
+          type: string
+        registro:
+          $ref: '#/components/schemas/LoteTasa'
+    LoteTasa:
+      type: object
+      required: [id_tasa, tasas]
+      properties:
+        id_tasa:
+          type: string
+        tasas:
+          type: object
+          additionalProperties:
+            type: number
+        created_at:
+          type: [string, 'null']
+          format: date-time
+    PublicarRequest:
+      type: object
+      properties:
+        modo_prueba_global:
+          type: boolean
+    PublicacionResponse:
+      type: object
+      required: [success, id_tasa, procesados, detalle]
+      properties:
+        success:
+          type: boolean
+          const: true
+        id_tasa:
+          type: string
+        procesados:
+          type: integer
+        detalle:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicacionResultado'
+    PublicacionResultado:
+      type: object
+      properties:
+        socio:
+          type: string
+        status:
+          type: string
+          enum: [ok, error]
+        error:
+          type: string
+    NotificacionResponse:
+      type: object
+      required: [success, notificacion]
+      properties:
+        success:
+          type: boolean
+          const: true
+        notificacion:
+          type: object
+          required: [id_tasa]
+          properties:
+            id_tasa:
+              type: string
+    CarteleraResponse:
+      type: object
+      required: [success, datos]
+      properties:
+        success:
+          type: boolean
+          const: true
+        datos:
+          $ref: '#/components/schemas/Cartelera'
+    Cartelera:
+      type: object
+      properties:
+        nombre_socio:
+          type: string
+        id_grupo:
+          type: string
+        moneda_base:
+          type: string
+        lote_tasa:
+          type: string
+        fecha_actualizacion:
+          type: string
+        hora_actualizacion:
+          type: string
+        tarjetas_paises:
+          type: array
+          items:
+            $ref: '#/components/schemas/TarjetaPais'
+    TarjetaPais:
+      type: object
+      properties:
+        code:
+          type: string
+        nombre_pais:
+          type: string
+        bandera:
+          type: string
+        compra:
+          type: number
+        venta:
+          type: number
+        trend:
+          type: string
+    RenderRequest:
+      type: object
+      required: [socio]
+      properties:
+        socio:
+          type: string
+    DispararRequest:
+      type: object
+      required: [socio]
+      properties:
+        socio:
+          type: string
+        modo_prueba:
+          type: boolean
+    DispararResponse:
+      type: object
+      required: [success, socio, evolutionResponse]
+      properties:
+        success:
+          type: boolean
+          const: true
+        socio:
+          type: string
+        evolutionResponse:
+          type: object
+          additionalProperties: true
+    Perfil:
+      type: object
+      required: [nombre, activo, rol, moneda_base, saldo_inicial, mostrar, monedas, herencia]
+      properties:
+        id_grupo:
+          type: string
+        nombre:
+          type: string
+        activo:
+          type: boolean
+        rol:
+          type: string
+        moneda_base:
+          type: string
+        saldo_inicial:
+          type: string
+        mostrar:
+          $ref: '#/components/schemas/Mostrar'
+        monedas:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/MonedaPerfil'
+        herencia:
+          type: boolean
+    Mostrar:
+      type: object
+      properties:
+        tasas:
+          type: boolean
+        dashboard:
+          type: boolean
+    MonedaPerfil:
+      type: object
+      properties:
+        activo:
+          type: boolean
+        porcentaje:
+          type: object
+          properties:
+            deposito:
+              type: number
+            pago:
+              type: number
+        def:
+          type: string
+        deposito:
+          type: number
+        dep_op:
+          type: string
+        pago:
+          type: number
+        pago_op:
+          type: string
+        tipo:
+          type: string
+        polar_D:
+          type: string
+        polar_P:
+          type: string
+        polaridad:
+          type: string
+    GuardarPerfilRequest:
+      type: object
+      required: [nombre]
+      properties:
+        nombre:
+          type: string
+        id_grupo:
+          type: string
+        rol:
+          type: string
+        moneda_base:
+          type: string
+        saldo_inicial:
+          type: [number, string]
+        mostrar:
+          $ref: '#/components/schemas/Mostrar'
+        monedas:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/MonedaPerfil'
+        herencia:
+          type: boolean
+    TogglePerfilRequest:
+      type: object
+      required: [activo]
+      properties:
+        activo:
+          type: boolean
+    PerfilResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Perfil'
+    Comprobante:
+      type: object
+      required:
+        - hash_largo
+        - hash_corto
+        - fecha_hora_comprobante
+        - monto
+        - moneda
+        - banco
+        - titular
+        - referencia
+        - procesado_ia
+        - url_imagen
+        - nombre_socio_1
+        - moneda_socio_1
+        - tipo_op1
+        - monto_1
+        - tasa_1
+        - me1
+        - moneda_socio_2
+        - tipo_op2
+        - monto_2
+        - tasa_2
+        - me2
+        - m1_socio
+        - m2_socio
+        - lote_tasa_asignado
+      properties:
+        hash_largo:
+          type: string
+        hash_corto:
+          type: string
+        fecha_hora_comprobante:
+          type: string
+          format: date-time
+        timestamp_msg:
+          type: [integer, 'null']
+          format: int64
+        monto:
+          type: number
+        moneda:
+          type: string
+        banco:
+          type: string
+        titular:
+          type: string
+        referencia:
+          type: string
+        procesado_ia:
+          type: boolean
+        url_imagen:
+          type: string
+        caption:
+          type: [string, 'null']
+        nombre_socio_1:
+          type: string
+        moneda_socio_1:
+          type: string
+        tipo_op1:
+          type: string
+        monto_1:
+          type: number
+        tasa_1:
+          type: number
+        me1:
+          type: number
+        nombre_socio_2:
+          type: [string, 'null']
+        moneda_socio_2:
+          type: string
+        tipo_op2:
+          type: string
+        monto_2:
+          type: number
+        tasa_2:
+          type: number
+        me2:
+          type: number
+        m1_socio:
+          type: number
+        m2_socio:
+          type: number
+        lote_tasa_asignado:
+          type: string
+    LiquidarInput:
+      type: object
+      properties:
+        hash_largo:
+          type: string
+        socio_1:
+          type: string
+        tipo_op1:
+          type: string
+        monto_1:
+          type: [number, string]
+        tasa_1:
+          type: [number, string]
+        me1:
+          type: [number, string]
+        socio_2:
+          type: [string, 'null']
+        tipo_op2:
+          type: string
+        monto_2:
+          type: [number, string]
+        tasa_2:
+          type: [number, string]
+        me2:
+          type: [number, string]
+        lote_tasa:
+          type: string
+    Liquidacion:
+      type: object
+      properties:
+        hash_largo:
+          type: string
+        socio_1:
+          type: string
+        tipo_op1:
+          type: string
+        monto_1:
+          type: number
+        tasa_1:
+          type: number
+        me1:
+          type: number
+        socio_2:
+          type: [string, 'null']
+        tipo_op2:
+          type: string
+        monto_2:
+          type: number
+        tasa_2:
+          type: number
+        me2:
+          type: number
+        lote_tasa:
+          type: string
+    LiquidacionResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/Liquidacion'
+    UpdateInput:
+      type: object
+      properties:
+        monto:
+          type: [number, string]
+        moneda:
+          type: string
+        moneda_recibo:
+          type: string
+        banco:
+          type: string
+        referencia:
+          type: string
+        titular:
+          type: string
+        id_tasa:
+          type: string
+        lote_tasa:
+          type: string
+        lote_tasa_asignado:
+          type: string
+        nombre_socio_1:
+          type: string
+        socio_1:
+          type: string
+        socio1:
+          type: string
+        nombre_socio_2:
+          type: string
+        socio_2:
+          type: string
+        socio2:
+          type: string
+        tipo_manual:
+          type: string
+        tipo_op1:
+          type: string
+        tipo_op:
+          type: string
+        monto_1:
+          type: [number, string]
+        monto_2:
+          type: [number, string]
+        m1_socio:
+          type: [number, string]
+        m2_socio:
+          type: [number, string]
+        estado:
+          type: string
+        conteo:
+          type: integer
+        timestamp:
+          type: integer
+          format: int64
+    ReportesFiltrosResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          required: [roles, entidades, hashes]
+          properties:
+            roles:
+              type: array
+              items: {type: string}
+            entidades:
+              type: array
+              items: {type: string}
+            hashes:
+              type: array
+              items: {type: string}
+        requestId:
+          type: string
+    EnviarImagenRequest:
+      type: object
+      properties:
+        socio:
+          type: string
+        remoteJid:
+          type: string
+        caption:
+          type: string
+          maxLength: 1024
+        base64:
+          type: string
+        mimeType:
+          type: string
+        fileName:
+          type: string
+          maxLength: 120
+    EnviarTextoRequest:
+      type: object
+      properties:
+        socio:
+          type: string
+        remoteJid:
+          type: string
+        texto:
+          type: string
+          maxLength: 4096
+    ReporteResultado:
+      type: object
+      properties:
+        jid:
+          type: string
+        messageId:
+          type: string
+        status:
+          type: string
+        simulated:
+          type: boolean
+        duplicate:
+          type: boolean
+        bytes:
+          type: integer
+    ReporteResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/ReporteResultado'
+        requestId:
+          type: string
+    QueueItem:
+      type: object
+      properties:
+        hash_largo:
+          type: string
+        hash_corto:
+          type: [string, 'null']
+        timestamp:
+          type: [integer, 'null']
+          format: int64
+        nombre_socio_1:
+          type: [string, 'null']
+        nombre_socio_2:
+          type: [string, 'null']
+        conteo:
+          type: [integer, 'null']
+        estado:
+          type: [string, 'null']
+        url_imagen:
+          type: [string, 'null']
+    AdminQueueResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueueItem'
+    QueueUpdateRequest:
+      type: object
+      properties:
+        nombre_socio_1:
+          type: string
+        nombre_socio_2:
+          type: string
+        estado:
+          type: string
+        conteo:
+          type: integer
+        timestamp:
+          type: integer
+          format: int64
+    QueueUpdateResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            nombre_socio_1:
+              type: [string, 'null']
+            nombre_socio_2:
+              type: [string, 'null']
+            estado:
+              type: [string, 'null']
+            conteo:
+              type: [integer, 'null']
+            timestamp:
+              type: [integer, 'null']
+              format: int64

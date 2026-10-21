@@ -1139,6 +1139,73 @@ go test ./internal/platform/httpx -race -v
 
 Casos cubiertos: mapeo de `HTTPError`, `fiber.Error` y timeout; ocultamiento de la causa en `500`; validación y generación de request IDs; admin deshabilitado, inválido y correcto; envelopes; health/ready; routing por host y path; `/api/*` JSON; traversal `403`; asset inexistente `404`; SPA fallback y caché.
 
+### 11.8 Matriz canónica vs alias
+
+La superficie canónica es la única documentada en `docs/openapi.yaml`. Los alias existen solo para compatibilidad y siempre responden con `Deprecation`, `Sunset` y `Link`.
+
+| Dominio | Método y ruta canónica | Alias legacy |
+|---|---|---|
+| Health | `GET /health` | — |
+| Health | `GET /ready` | — |
+| Tasas | `GET /api/v1/tasas/monitor` | `GET /api/tasas/monitor` |
+| Tasas | `GET /api/v1/tasas/socios` | `GET /api/tasas/socios` |
+| Tasas | `GET /api/v1/tasas/hoo-borrador` | `GET /api/tasas/hoo-borrador`, `GET /api/tasas/fetch-hoo` |
+| Tasas | `PUT /api/v1/tasas/socios/:socio` | `PUT /api/tasas/socios/:socio` |
+| Tasas | `POST /api/v1/tasas/guardar-lote` | `POST /api/tasas/guardar-lote` |
+| Tasas | `POST /api/v1/tasas/publicar-lote` | `POST /api/tasas/publicar-lote`, `POST /api/tasas/publicar`, `POST /api/tasas/reenviar` |
+| Tasas | `POST /api/v1/tasas/notificar-remesas` | `POST /api/tasas/notificar-remesas` |
+| Tasas | `GET /api/v1/tasas/calcular/:socio` | `GET /api/tasas/calcular/:socio` |
+| Tasas | `GET /api/v1/tasas/render/:socio` | `GET /api/tasas/render/:socio`, `GET /api/preview-image/:identificador?` |
+| Tasas | `POST /api/v1/tasas/render` | `POST /api/tasas/render` |
+| Tasas | `POST /api/v1/tasas/disparar` | `POST /api/tasas/disparar` |
+| Tasas | `POST /api/v1/tasas/disparar-lote` | `POST /api/tasas/disparar-lote` |
+| Tasas | `DELETE /api/v1/tasas/lote/:id_tasa` | `DELETE /api/tasas/lote/:id_tasa` |
+| Perfiles | `GET /api/v1/perfiles` | `GET /api/directorio`, `GET /api/socios`, `GET /api/v1/atenea/directorio`, `GET /api/v1/atenea/socios` |
+| Perfiles | `GET /api/v1/perfiles/activos` | — |
+| Perfiles | `POST /api/v1/perfiles/guardar` | `POST /api/socios/config`, `POST /api/v1/atenea/socios/config` |
+| Perfiles | `POST /api/v1/perfiles/apagar-todos` | `PATCH /api/socios/desactivar-todos`, `PATCH /api/v1/atenea/socios/desactivar-todos` |
+| Perfiles | `POST /api/v1/perfiles/plantilla/memorizar` | `POST /api/socios/guardar-vigentes`, `POST /api/v1/atenea/socios/guardar-vigentes` |
+| Perfiles | `POST /api/v1/perfiles/plantilla/restaurar` | `POST /api/socios/restaurar-vigentes`, `POST /api/v1/atenea/socios/restaurar-vigentes` |
+| Perfiles | `PATCH /api/v1/perfiles/:nombre/estado` | `PATCH /api/socios/:nombre/estado`, `PATCH /api/v1/atenea/socios/:nombre/estado` |
+| Perfiles | `DELETE /api/v1/perfiles/:nombre` | `DELETE /api/directorio/:nombre`, `DELETE /api/v1/atenea/directorio/:nombre` |
+| Comprobantes | `GET /api/v1/comprobantes` | `GET /api/comprobantes`, `GET /api/cola`, `GET /api/reportes`, `GET /api/reportes/operaciones`, `GET /api/v1/atenea/comprobantes`, `GET /api/v1/atenea/cola`, `GET /api/v1/atenea/reportes`, `GET /api/v1/atenea/reportes/operaciones` |
+| Comprobantes | `POST /api/v1/comprobantes/liquidar` | `POST /api/comprobantes/liquidar`, `POST /api/v1/atenea/comprobantes/liquidar` |
+| Comprobantes | `POST /api/v1/comprobantes/:hashLargo/releer` | `POST /api/comprobantes/:hashLargo/releer`, `POST /api/v1/atenea/comprobantes/:hashLargo/releer` |
+| Comprobantes | `PUT /api/v1/comprobantes/:hashLargo` | `PUT /api/comprobantes/:hashLargo`, `PUT /api/v1/atenea/comprobantes/:hashLargo` |
+| Comprobantes | `DELETE /api/v1/comprobantes/:hashLargo` | `DELETE /api/comprobantes/:hashLargo`, `DELETE /api/v1/atenea/comprobantes/:hashLargo` |
+| Comprobantes | `GET /api/v1/comprobantes/tasas/ultimas` | `GET /api/tasas/ultimas`, `GET /api/v1/atenea/tasas/ultimas` |
+| Comprobantes | `GET /api/v1/comprobantes/tasas/historial` | `GET /api/tasas/historial`, `GET /api/v1/atenea/tasas/historial` |
+| Reportes | `GET /api/v1/reportes/filtros` | `GET /api/reportes/filtros`, `GET /api/v1/atenea/reportes/filtros` |
+| Reportes | `POST /api/v1/reportes/imagen` | `POST /api/reportes/enviar-whatsapp`, `POST /api/whatsapp/enviar-media`, `POST /api/v1/atenea/reportes/enviar-whatsapp`, `POST /api/v1/atenea/whatsapp/enviar-media` |
+| Reportes | `POST /api/v1/reportes/texto` | — |
+| Admin | `GET /api/v1/admin/cola` | `GET /api/admin/cola`, `GET /api/v1/atenea/admin/cola` |
+| Admin | `PUT /api/v1/admin/cola/:hashLargo` | `PUT /api/admin/cola/:hashLargo` |
+| Admin | `DELETE /api/v1/admin/cola/:hashLargo` | `DELETE /api/admin/cola/:hashLargo` (acepta `{claveAdmin}`) |
+
+`GET /api/reportes` nunca pertenece al dominio Reportes: es el listado de Comprobantes. Las rutas específicas `/api/reportes/filtros` y `/api/reportes/enviar-whatsapp` se registran antes que el alias general para conservar esa precedencia.
+
+### 11.9 Política de deprecación y rutas retiradas
+
+- `Sunset` es `Sat, 31 Dec 2027 23:59:59 GMT` para todos los alias.
+- `Deprecation: true` y `Link: <sucesor>; rel="successor-version"` acompañan siempre al alias, incluso cuando el guard responde `401` o `503`.
+- Un alias no cambia de semántica ni de envelope; el contador `alias_usage_total` permite decidir su retiro.
+- Los alias `/api/v1/atenea/*` son los primeros candidatos a retiro.
+- `POST /api/tasas/n8n-webhook` responde `410 GONE` con `code: ROUTE_REMOVED` y `Link` a `/api/v1/tasas/guardar-lote`.
+- `/disparar` solo acepta `POST`; cualquier otro método responde `405 METHOD_NOT_ALLOWED` con `Allow: POST`.
+- Un `/api/*` desconocido responde `404` JSON con `{success:false,code:"NOT_FOUND"}` y nunca cae en el SPA.
+
+### 11.10 OpenAPI y verificación de rutas
+
+La especificación está en [`docs/openapi.yaml`](docs/openapi.yaml). Es OpenAPI 3.1, documenta únicamente `/health`, `/ready` y las 36 rutas canónicas, e incluye los esquemas `ApiKeyAuth` y `AdminKeyAuth`. Los alias no se publican como endpoints de la API v1.
+
+```powershell
+npx --yes @redocly/cli@latest lint docs/openapi.yaml
+.\scripts\check-routes.ps1
+go test ./cmd/server -race -v -count=1
+```
+
+`TestNoDuplicateRoutes` recorre `app.GetRoutes(true)` y falla ante cualquier par `Method + Path` repetido. `TestRouteManifest` imprime la superficie para `check-routes.ps1`; el script compara las 36 canónicas, los 64 alias y la ruta retirada contra la matriz de §5, y falla si una firma cambia o desaparece.
+
 ## 12. Base de datos
 
 > Fase 3 implementada: pool único, ping de arranque, `statement_timeout` y transacciones seguras. El catálogo completo de tablas, ownership, JSONB, índices, migraciones y backup/restore se completa en las fases de dominio.

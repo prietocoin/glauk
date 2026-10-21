@@ -21,6 +21,12 @@ func methodNotAllowed(routes []fiber.Route) fiber.Handler {
 		permitidos[route.Path][route.Method] = true
 	}
 	return func(c *fiber.Ctx) error {
+		if c.Path() == "/disparar" {
+			if c.Method() == fiber.MethodPost {
+				return c.Next()
+			}
+			return responder405(c, []string{fiber.MethodPost})
+		}
 		if !strings.HasPrefix(c.Path(), "/api/") {
 			return c.Next()
 		}
@@ -32,13 +38,17 @@ func methodNotAllowed(routes []fiber.Route) fiber.Handler {
 			for metodo := range metodos {
 				allow = append(allow, metodo)
 			}
-			sort.Strings(allow)
-			c.Set("Allow", strings.Join(allow, ", "))
-			return httpx.Fail(c, fiber.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED",
-				"metodo no permitido para esta ruta")
+			return responder405(c, allow)
 		}
 		return c.Next()
 	}
+}
+
+func responder405(c *fiber.Ctx, allow []string) error {
+	sort.Strings(allow)
+	c.Set("Allow", strings.Join(allow, ", "))
+	return httpx.Fail(c, fiber.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED",
+		"metodo no permitido para esta ruta")
 }
 
 // coincidePatron soporta parametros :nombre y el comodin final *. No pretender

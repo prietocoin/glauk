@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"glauk/internal/platform/httpx"
 	reporteshttp "glauk/internal/reportes/http"
 )
 
@@ -35,6 +36,8 @@ func alias(app *fiber.App, method, path, successor string, handlers ...fiber.Han
 // general. /api/tasas/ultimas e /historial pertenecen a Comprobantes.
 func registerLegacySpecific(app *fiber.App, deps *Dependencies) {
 	reporteshttp.RegisterAliases(app, deps.Reportes, deps.Guard)
+	registerLegacyAdmin(app, deps)
+	app.Post("/api/tasas/n8n-webhook", routeRemoved("/api/v1/tasas/guardar-lote"))
 	alias(app, fiber.MethodGet, "/api/tasas/ultimas",
 		"/api/v1/comprobantes/tasas/ultimas", deps.Comprobantes.Ultimas)
 	alias(app, fiber.MethodGet, "/api/tasas/historial",
@@ -86,4 +89,14 @@ func registerLegacyGeneral(app *fiber.App, deps *Dependencies) {
 	alias(app, fiber.MethodPost, "/api/comprobantes/:hashLargo/releer", "/api/v1/comprobantes/:hashLargo/releer", c.Releer)
 	alias(app, fiber.MethodPut, "/api/comprobantes/:hashLargo", "/api/v1/comprobantes/:hashLargo", c.Actualizar)
 	alias(app, fiber.MethodDelete, "/api/comprobantes/:hashLargo", "/api/v1/comprobantes/:hashLargo", c.Eliminar)
+}
+
+// routeRemoved conserva un 410 explícito para las rutas que no se portan.
+// El enlace apunta a la alternativa canónica que debe usar el automatizador.
+func routeRemoved(successor string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		c.Set("Link", "<"+successor+`>; rel="successor-version"`)
+		return httpx.Fail(c, fiber.StatusGone, "ROUTE_REMOVED",
+			"ruta retirada; use la API canónica")
+	}
 }

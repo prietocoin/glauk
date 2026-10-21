@@ -23,6 +23,8 @@ func registerAteneaReportes(app *fiber.App, deps *Dependencies) {
 		"/api/v1/reportes/filtros", h.FiltrosLegacy)
 	alias(app, fiber.MethodPost, "/api/v1/atenea/reportes/enviar-whatsapp",
 		"/api/v1/reportes/imagen", guard, h.EnviarImagenLegacy)
+	alias(app, fiber.MethodPost, "/api/v1/atenea/whatsapp/enviar-media",
+		"/api/v1/reportes/imagen", guard, h.EnviarImagenLegacy)
 }
 
 func registerAteneaPerfiles(app *fiber.App, deps *Dependencies) {
