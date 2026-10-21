@@ -8,12 +8,21 @@ import (
 	"glauk/internal/platform/httpx"
 )
 
-// Register monta exactamente las diez rutas canónicas de Comprobantes.
+// Register monta las diez rutas canónicas de Comprobantes.
 func Register(app *fiber.App, deps Deps) error {
+	if err := RegisterCanonical(app, deps); err != nil {
+		return err
+	}
+	RegisterAdmin(app, deps)
+	return nil
+}
+
+// RegisterCanonical monta solo las siete rutas de §5.5.1. cmd/server lo usa
+// para respetar el orden canónico antes de la consola administrativa.
+func RegisterCanonical(app *fiber.App, deps Deps) error {
 	if err := deps.Valida(); err != nil {
 		return err
 	}
-
 	app.Get(BasePath, deps.Listar)
 	app.Post(BasePath+"/liquidar", deps.Liquidar)
 	app.Post(BasePath+"/:hashLargo/releer", deps.Releer)
@@ -21,12 +30,15 @@ func Register(app *fiber.App, deps Deps) error {
 	app.Delete(BasePath+"/:hashLargo", deps.Eliminar)
 	app.Get(BasePath+"/tasas/ultimas", deps.Ultimas)
 	app.Get(BasePath+"/tasas/historial", deps.Historial)
+	return nil
+}
 
+// RegisterAdmin monta la consola de §5.8 con su propia clave.
+func RegisterAdmin(app *fiber.App, deps Deps) {
 	admin := app.Group("/api/v1/admin", requireAdmin(deps.AdminKey))
 	admin.Get("/cola", deps.Cola)
 	admin.Put("/cola/:hashLargo", deps.ActualizarCola)
 	admin.Delete("/cola/:hashLargo", deps.EliminarCola)
-	return nil
 }
 
 func requireAdmin(expected string) fiber.Handler {
