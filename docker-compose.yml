@@ -1,0 +1,58 @@
+name: glauk
+
+services:
+  glauk:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: glauk:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    stop_grace_period: 20s
+    environment:
+      APP_ENV: development
+      PORT: "3000"
+      PUBLIC_DIR: /app/public
+      TZ: UTC
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      SHUTDOWN_TIMEOUT: 15s
+      DATABASE_URL: "postgres://${POSTGRES_USER:-glauk}:${POSTGRES_PASSWORD:-glauk}@postgres:5432/${POSTGRES_DB:-glauk}?sslmode=disable"
+      EVOLUTION_API_URL: ""
+      EVOLUTION_INSTANCE: Glauk
+      CORS_ALLOWED_ORIGINS: "*"
+    networks:
+      - edge
+      - db
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-glauk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-glauk}
+      POSTGRES_DB: ${POSTGRES_DB:-glauk}
+      TZ: UTC
+    volumes:
+      - glauk_pgdata:/var/lib/postgresql/data
+      - ./scripts/local-db-init.sql:/docker-entrypoint-initdb.d/001-local.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - db
+
+volumes:
+  glauk_pgdata:
+
+networks:
+  edge:
+  db:
+    internal: true

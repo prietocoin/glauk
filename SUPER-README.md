@@ -1292,7 +1292,185 @@ Autenticación, CORS, headers, rate limit, secretos, amenazas, checklist de desp
 
 ## 14. Operación
 
-Docker, Easypanel, health, logs, métricas, escalado, rollback y ventanas de mantenimiento.
+El despliegue de Glauk es un único binario y un único contenedor. La imagen final es `distroless`, se ejecuta como usuario `nonroot` y solo contiene `/app/glauk` y `/app/public`; el código fuente, las dependencias de compilación y los archivos `.env` quedan exclusivamente en el stage de build.
+
+### 14.1 Dockerfile explicado línea a línea
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM golang:1.27.2-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w" -o /out/glauk ./cmd/server
+
+FROM gcr.io/distroless/static-debian12:nonroot
+WORKDIR /app
+COPY --from=build /out/glauk /app/glauk
+COPY --from=build /src/public /app/public
+ENV PORT=3000
+EXPOSE 3000
+USER nonroot:nonroot
+ENTRYPOINT ["/app/glauk"]
+```
+
+| Línea / bloque | Por qué existe |
+|---|---|
+| `# syntax=docker/dockerfile:1` | Activa BuildKit y fija la sintaxis del Dockerfile. No forma parte de la imagen. |
+| `FROM golang:1.27.2-alpine AS build` | Toolchain reproducible para compilar; el stage se llama `build` y no llega al runtime. |
+| `WORKDIR /src` | Directorio único del build; todas las rutas relativas cuelgan de aquí. |
+| `COPY go.mod go.sum ./` | Copia solo los manifiestos primero para aprovechar la caché de capas. |
+| `RUN go mod download` | Descarga las dependencias en una capa separada; si el código cambia pero `go.mod`/`go.sum` no, se reutiliza. |
+| `COPY . .` | Copia el contexto a `/src` solo durante el build. `.dockerignore` excluye `.git`, `.env`, binarios, logs y `coverage.out`. |
+| `ARG TARGETOS=linux` | Permite que Buildx sobrescriba el sistema operativo destino; por defecto, Linux. |
+| `ARG TARGETARCH=amd64` | Permite compilar para `amd64`, `arm64`, etc. sin editar el archivo. |
+| `RUN CGO_ENABLED=0 ... go build ...` | Genera un binario estático, sin dependencias de libc, con `-trimpath` (rutas reproducibles) y `-ldflags="-s -w"` (símbolos y depuración eliminados). La salida es `/out/glauk` desde `./cmd/server`. |
+| `FROM gcr.io/distroless/static-debian12:nonroot` | Runtime mínimo: sin shell, sin gestor de paquetes, sin compiladores y con el usuario `nonroot` predefinido. |
+| `WORKDIR /app` | El binario y los estáticos viven en `/app`; el `PUBLIC_DIR` por defecto (`./public`) resuelve a `/app/public`. |
+| `COPY --from=build /out/glauk /app/glauk` | Único ejecutable de la imagen final. |
+| `COPY --from=build /src/public /app/public` | Recursos estáticos servidos por el binario; no hay servidor web adicional. |
+| `ENV PORT=3000` | Puerto por defecto de la aplicación dentro del contenedor. |
+| `EXPOSE 3000` | Documenta el puerto; el mapeo real lo hace Easypanel o `docker run -p`. |
+| `USER nonroot:nonroot` | El proceso no corre como root; el usuario existe en la imagen distroless. |
+| `ENTRYPOINT ["/app/glauk"]` | Ejecución directa sin shell, con señales y `SIGTERM` llegando al proceso Go. |
+
+La imagen final **no** contiene `go.mod`, `go.sum`, `cmd/`, `internal/`, `.env`, tests, compiladores ni un shell. No se puede usar `docker exec ... sh` para depurar; el diagnóstico se hace por logs, `/health`, `/ready` y el estado del contenedor. No se define un `HEALTHCHECK` dentro de la imagen porque distroless no incluye `curl` ni `wget`; el healthcheck HTTP lo ejecuta Easypanel o el smoke test externo.
+
+### 14.2 Build y ejecución local
+
+```powershell
+docker build -t glauk:local .
+docker image inspect glauk:local --format '{{.Size}}'
+docker run --rm --name glauk -p 3000:3000 --env-file .env glauk:local
+```
+
+`DATABASE_URL` debe ser accesible desde dentro del contenedor. En Windows/macOS, `localhost` dentro del contenedor no es el host: usar el nombre del servicio de Compose o `host.docker.internal` si se ejecuta con `docker run`. El archivo `.env` se pasa en tiempo de ejecución y nunca se copia a la imagen.
+
+Stack local completo:
+
+```powershell
+docker compose up -d --build
+.\scripts\smoke.ps1
+docker compose logs -f glauk
+docker compose down
+```
+
+El compose levanta `glauk` en `3000:3000` y `postgres:16-alpine` en una red `db` marcada como `internal`; Postgres no publica puertos. `glauk` se conecta a `db` y a una red `edge` para conservar salida a Evolution si se configura. El volumen `glauk_pgdata` persiste la base local. `scripts/local-db-init.sql` crea el mínimo de tablas y datos para que el smoke valide monitor y filtros en una base nueva; **es solo un seed de desarrollo**, no una migración de producción. `docker compose down -v` elimina también ese volumen y vuelve a ejecutar el seed en el siguiente arranque.
+
+### 14.3 Easypanel
+
+| Elemento | Valor |
+|---|---|
+| Tipo de servicio | Aplicación desde Dockerfile. |
+| Repositorio / contexto | Repositorio Glauk, directorio `Core`, Dockerfile `Dockerfile`. |
+| Puerto interno | `3000`. Easypanel publica 80/443 a través de su proxy TLS. |
+| Dominio | Dominio del panel o de la API; TLS termina en el proxy. No se necesita certificado dentro del contenedor. |
+| Healthcheck | `GET /health`, intervalo 5 s, timeout 5 s, 3 reintentos, periodo de gracia inicial 15 s. |
+| Réplicas | **1**. La idempotencia de Reportes y el rate limit viven en memoria del proceso. |
+| Reinicio | `unless-stopped` o la política equivalente de Easypanel. |
+| Zona horaria | `TZ=UTC`. |
+| Persistencia | Ninguna en el contenedor: el binario es stateless. PostgreSQL es un servicio gestionado o un contenedor separado, nunca expuesto públicamente. |
+
+Variables mínimas de producción (los secretos se cargan como *secrets* de Easypanel, no en la imagen):
+
+| Variable | Valor / uso |
+|---|---|
+| `APP_ENV` | `production`. |
+| `PORT` | `3000`. |
+| `PUBLIC_DIR` | `/app/public` (explícito; el default también resuelve ahí por el `WORKDIR`). |
+| `DATABASE_URL` | URL de PostgreSQL gestionado. **Secreto.** Tiene prioridad sobre `DB_*`. |
+| `EVOLUTION_API_URL` | URL de Evolution. Si queda vacía, el envío entra en simulación. |
+| `EVOLUTION_API_KEY` | Clave de Evolution. **Secreto.** |
+| `EVOLUTION_INSTANCE` | Instancia de Evolution, por defecto `Glauk`. |
+| `TZ` | `UTC`. |
+| `LOG_LEVEL` | `info`; subir a `debug` solo de forma temporal. |
+| `LOG_FORMAT` | `json` en producción para que el visor pueda filtrar campos. |
+| `SHUTDOWN_TIMEOUT` | `15s`; el proxy debe permitir al menos ese margen antes de matar el contenedor. |
+| `TRUSTED_PROXY_HEADER` | `X-Forwarded-Host` detrás del proxy de Easypanel. |
+| `CORS_ALLOWED_ORIGINS` | Origen exacto del panel; evitar `*` si el panel usa cookies o credenciales. |
+| `SECURITY_API_KEY` | Opcional; si se define, protege las mutaciones con `X-API-Key`. **Secreto.** |
+| `ADMIN_API_KEY` | Opcional; si queda vacía, la consola administrativa responde 503. **Secreto.** |
+
+No se debe definir `AUTHENTICATION_API_KEY` junto con `EVOLUTION_API_KEY`: el alias legado existe solo para migración y el arranque falla si ambas difieren. La lista completa y sus defaults está en `.env.example` y en el Capítulo 5.
+
+### 14.4 Health y ready
+
+| Sonda | Contrato | Interpretación |
+|---|---|---|
+| `GET /health` | 200 con `status:"ok"`, `service:"glauk"`, `checks.database.status:"ok"`, `checks.evolution.status`, `uptime_s` y `version`. Si el ping a PostgreSQL falla, responde 503 con `status:"degraded"` y `database.status:"error"`. | Sonda operativa completa. Incluye base de datos y modo de Evolution; `Cache-Control: no-store`. |
+| `GET /ready` | 200 con `status:"ok"` cuando el ping a PostgreSQL funciona; 503 cuando no. No incluye `version` ni `instance`. | Sonda de disponibilidad para enrutar tráfico. |
+
+Ambas usan un timeout acotado de 2 s para el ping. Si `/health` falla:
+
+1. Revisar logs del contenedor y la conectividad a `DATABASE_URL`.
+2. Confirmar que PostgreSQL acepta conexiones y que el pool no está agotado.
+3. No reiniciar en bucle si la base está caída: el proceso está sano pero degradado.
+4. Si solo `checks.evolution` está en `simulated`, no es un fallo: `EVOLUTION_API_URL` está vacía y los envíos se simulan.
+5. Después de corregir, esperar a que `/ready` responda 200 antes de reabrir tráfico.
+
+El smoke test valida además cabeceras de seguridad: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` y `Cross-Origin-Opener-Policy: same-origin`. `Strict-Transport-Security` solo se exige cuando `BaseUrl` usa HTTPS, porque el middleware lo emite únicamente sobre TLS.
+
+### 14.5 Logs
+
+El logger usa texto o JSON según `LOG_FORMAT`. En producción usar `json`. Cada request registra, sin cuerpos ni cabeceras sensibles:
+
+- `request_id`: mismo valor que la cabecera `X-Request-Id` de la respuesta.
+- `method`, `path`, `status`, `duration_ms`, `bytes`.
+- `tenant`, cuando el enrutamiento por host lo resolvió.
+
+Consultas útiles:
+
+```powershell
+docker compose logs -f glauk
+docker compose logs glauk | Select-String '"status":5'
+docker compose logs glauk | Select-String 'request_id'
+```
+
+En Easypanel, usar el visor de logs y filtrar por `status`, `path` o `request_id`. Para un incidente, conservar el `request_id` del panel; permite correlacionar la respuesta con la línea exacta sin exponer payloads. Nunca se registran bases64, captions, JIDs completos, API keys ni el cuerpo de los errores de PostgreSQL.
+
+### 14.6 Métricas mínimas
+
+En la fase 1 no hay Prometheus; se usan las métricas del proveedor, los logs estructurados y las sondas:
+
+| Métrica | Cómo obtenerla | Umbral de atención |
+|---|---|---|
+| Latencia de `/health` | `duration_ms` del log o el smoke test | p95 > 1 s de forma sostenida. |
+| Errores HTTP 5xx | Logs filtrados por `status:5xx` | Cualquier aumento sostenido sobre la línea base. |
+| Envíos de Reportes | Eventos de envío y respuestas de Evolution | Aumento de fallos o `EVOLUTION_UNAVAILABLE`. |
+| Latencia de PostgreSQL | `checks.database.latency_ms` en `/health` | Cerca del timeout de 2 s. |
+| Reinicios del contenedor | Estado de Easypanel / `docker ps` | Más de un reinicio no planificado. |
+| Tamaño de imagen | `docker image inspect glauk:local --format '{{.Size}}'` | Crecimiento anómalo tras un cambio de base. |
+
+El `uptime_s` de `/health` ayuda a distinguir un reinicio reciente de una caída de base. El healthcheck de Easypanel no sustituye una alerta de latencia: un 200 lento sigue siendo un problema de operación.
+
+### 14.7 Escalado y limitaciones
+
+La arquitectura actual es de **una réplica**:
+
+- `IdempotencyStore` y `RateLimiter` de Reportes son estado en memoria del proceso. Con dos réplicas, un doble clic puede generar dos envíos si cae en instancias distintas, y el límite de 60/minuto se aplica por instancia, no de forma global.
+- El apagado ordenado espera hasta `SHUTDOWN_TIMEOUT` (15 s) para terminar envíos en curso. El orquestador debe dar más margen; el compose usa `stop_grace_period: 20s`.
+- No hay sesiones de usuario ni estado de aplicación en disco. Escalar horizontalmente solo es seguro después de mover idempotencia y rate limit a un almacén compartido (PostgreSQL o Redis) y ajustar el TTL/límite global.
+
+Hasta entonces, mantener **1 réplica**. Si se necesita más capacidad, primero separar lectura/escritura o migrar el estado compartido; no basta con subir el número de réplicas en Easypanel.
+
+### 14.8 Rollback y mantenimiento
+
+**Imagen:** volver a desplegar la imagen o el commit anterior. En Easypanel, seleccionar el deployment previo; en local:
+
+```powershell
+git checkout f13-ci
+docker compose up -d --build
+```
+
+El tag de esta fase es `f14-docker`. El rollback de aplicación no requiere tocar DNS ni TLS: el dominio sigue apuntando al mismo servicio y el proxy sigue terminando HTTPS.
+
+**Base de datos:** hacer backup antes de cualquier cambio de esquema y desplegar primero una versión compatible. Si el rollback de código no es suficiente, restaurar el backup con el servicio detenido y volver a ejecutar el smoke. En local, `docker compose down` conserva `glauk_pgdata`; `docker compose down -v` lo destruye y no debe usarse como rollback de producción.
+
+**Ventana de mantenimiento:** con una sola réplica hay un corte breve. Cerrar el tráfico en el proxy, esperar el apagado ordenado, ejecutar backup, desplegar, esperar `/ready` 200 y solo entonces reabrir. El smoke test debe pasar antes de declarar el despliegue terminado.
 
 ## 15. Pruebas y calidad
 
