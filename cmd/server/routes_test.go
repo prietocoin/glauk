@@ -27,8 +27,8 @@ import (
 type stubComprobantes struct{ comprobanteshttp.Service }
 
 func (stubComprobantes) List(context.Context,
-	comprobantesdomain.ListFilters) ([]comprobantesdomain.Comprobante, error) {
-	return []comprobantesdomain.Comprobante{}, nil
+	comprobantesdomain.ListFilters) ([]comprobantesdomain.Comprobante, int, error) {
+	return []comprobantesdomain.Comprobante{}, 0, nil
 }
 
 type stubSocios struct{}

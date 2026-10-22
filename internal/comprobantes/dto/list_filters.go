@@ -15,6 +15,8 @@ import "glauk/internal/comprobantes/domain"
 //	fechaFin    YYYY-MM-DD inclusiva; formato inválido = 400
 //	hash        coincidencia por hash largo o corto
 //	orden       fecha_asc | fecha_desc; cualquier otro valor usa fecha_desc
+//	limit       filas por página (default 100, máximo 100)
+//	offset      filas omitidas desde el inicio (mínimo 0)
 type ListFilters = domain.ListFilters
 
 // NormalizeListFilters limpia y valida las fechas antes de tocar PostgreSQL.

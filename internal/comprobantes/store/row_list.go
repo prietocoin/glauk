@@ -6,12 +6,15 @@ import (
 	"glauk/internal/comprobantes/calc"
 )
 
-// ScanRows materializa las 34 columnas del listado en filas crudas.
-func ScanRows(rows pgx.Rows) ([]calc.SourceRow, error) {
+// ScanRows materializa las 34 columnas del listado más el total del universo
+// filtrado (COUNT(*) OVER()) en filas crudas.
+func ScanRows(rows pgx.Rows) ([]calc.SourceRow, int, error) {
 	defer rows.Close()
 	items := make([]calc.SourceRow, 0)
+	total := 0
 	for rows.Next() {
 		var row calc.SourceRow
+		var totalRegistros int64
 		err := rows.Scan(
 			&row.HashLargo, &row.HashCorto, &row.FechaHora, &row.TimestampMsg,
 			&row.Monto, &row.Moneda, &row.Banco, &row.Titular, &row.Referencia,
@@ -21,14 +24,16 @@ func ScanRows(rows pgx.Rows) ([]calc.SourceRow, error) {
 			&row.LoteTasa, &row.LoteTasaHistorico, &row.TasasLote,
 			&row.MonedaSocio1, &row.MonedaSocio2, &row.Socio1Row, &row.Socio2Row,
 			&row.FBSocio1, &row.FBSocio2, &row.RolSocio1, &row.RolSocio2,
+			&totalRegistros,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
+		total = int(totalRegistros)
 		items = append(items, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return items, nil
+	return items, total, nil
 }

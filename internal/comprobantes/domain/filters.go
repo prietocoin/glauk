@@ -7,6 +7,14 @@ import (
 
 const dateLayout = "2006-01-02"
 
+const (
+	// DefaultListLimit conserva el tope histórico de 100 filas cuando el
+	// cliente no solicita paginación explícita.
+	DefaultListLimit = 100
+	// MaxListLimit protege PostgreSQL de páginas arbitrariamente grandes.
+	MaxListLimit = 100
+)
+
 // ListFilters contiene los parámetros de GET /api/v1/comprobantes.
 type ListFilters struct {
 	Socio       string `query:"socio"`
@@ -15,9 +23,12 @@ type ListFilters struct {
 	FechaFin    string `query:"fechaFin"`
 	Hash        string `query:"hash"`
 	Orden       string `query:"orden"`
+	Limit       int    `query:"limit"`
+	Offset      int    `query:"offset"`
 }
 
-// Normalize limpia los filtros y aplica el orden histórico por defecto.
+// Normalize limpia los filtros, aplica el orden histórico por defecto y acota
+// la paginación al rango soportado por la consulta.
 func (f *ListFilters) Normalize() {
 	f.Socio = strings.TrimSpace(f.Socio)
 	f.Rol = strings.TrimSpace(f.Rol)
@@ -27,6 +38,15 @@ func (f *ListFilters) Normalize() {
 	f.Orden = strings.TrimSpace(f.Orden)
 	if f.Orden != "fecha_asc" && f.Orden != "fecha_desc" {
 		f.Orden = "fecha_desc"
+	}
+	if f.Limit <= 0 {
+		f.Limit = DefaultListLimit
+	}
+	if f.Limit > MaxListLimit {
+		f.Limit = MaxListLimit
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
 	}
 }
 

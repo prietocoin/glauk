@@ -36,18 +36,19 @@ func New(db DB) *Repository {
 	return &Repository{db: db}
 }
 
-// ListRows ejecuta la consulta de auditoría y devuelve filas crudas.
-func (r *Repository) ListRows(ctx context.Context, filters domain.ListFilters) ([]calc.SourceRow, error) {
-	query := ListSQL + orderClause(filters.OrderAsc())
+// ListRows ejecuta la consulta de auditoría y devuelve una página de filas
+// crudas junto con el total del universo filtrado.
+func (r *Repository) ListRows(ctx context.Context, filters domain.ListFilters) ([]calc.SourceRow, int, error) {
+	query := ListSQL + orderClause(filters.OrderAsc(), filters.Limit, filters.Offset)
 	rows, err := r.db.Query(ctx, query,
 		filters.Socio, filters.Rol, filters.FechaInicio, filters.FechaFin, filters.Hash,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("consultar comprobantes: %w", err)
+		return nil, 0, fmt.Errorf("consultar comprobantes: %w", err)
 	}
-	items, err := ScanRows(rows)
+	items, total, err := ScanRows(rows)
 	if err != nil {
-		return nil, fmt.Errorf("leer comprobantes: %w", err)
+		return nil, 0, fmt.Errorf("leer comprobantes: %w", err)
 	}
-	return items, nil
+	return items, total, nil
 }

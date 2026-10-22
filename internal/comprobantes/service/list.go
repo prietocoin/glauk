@@ -20,23 +20,24 @@ func New(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-// List devuelve la auditoría proyectada y nunca un slice nulo.
-func (s *Service) List(ctx context.Context, filters domain.ListFilters) ([]domain.Comprobante, error) {
+// List devuelve la auditoría proyectada, el total del universo filtrado y
+// nunca un slice nulo.
+func (s *Service) List(ctx context.Context, filters domain.ListFilters) ([]domain.Comprobante, int, error) {
 	filters.Normalize()
 	if err := filters.Validate(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	rows, err := s.repo.ListRows(ctx, filters)
+	rows, total, err := s.repo.ListRows(ctx, filters)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	fundda, err := s.repo.Fundda(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	items := make([]domain.Comprobante, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, calc.ProjectRow(row, fundda))
 	}
-	return items, nil
+	return items, total, nil
 }

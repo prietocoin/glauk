@@ -18,7 +18,7 @@ const BasePath = "/api/v1/comprobantes"
 
 // Service es el subconjunto del servicio que consume la capa HTTP.
 type Service interface {
-	List(ctx context.Context, filters domain.ListFilters) ([]domain.Comprobante, error)
+	List(ctx context.Context, filters domain.ListFilters) ([]domain.Comprobante, int, error)
 	Latest(ctx context.Context) (domain.LoteTasa, error)
 	History(ctx context.Context) ([]domain.LoteTasa, error)
 	Liquidar(ctx context.Context, input dto.LiquidarInput) (domain.Liquidacion, error)

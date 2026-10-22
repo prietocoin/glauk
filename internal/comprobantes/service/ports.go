@@ -14,7 +14,7 @@ import (
 // InTx entrega un Tx acotado para que la lectura del comprobante, el recálculo
 // del snapshot y el upsert ocurran bajo la misma transacción de PostgreSQL.
 type Repository interface {
-	ListRows(ctx context.Context, filters domain.ListFilters) ([]calc.SourceRow, error)
+	ListRows(ctx context.Context, filters domain.ListFilters) ([]calc.SourceRow, int, error)
 	Fundda(ctx context.Context) (calc.Profile, error)
 	LatestLot(ctx context.Context) (domain.LoteTasa, error)
 	History(ctx context.Context) ([]domain.LoteTasa, error)

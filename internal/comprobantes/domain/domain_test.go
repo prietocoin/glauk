@@ -46,6 +46,16 @@ func TestListFiltersNormalizeValidateYOrden(t *testing.T) {
 	if defaultOrder.Orden != "fecha_desc" || defaultOrder.OrderAsc() {
 		t.Fatalf("orden por defecto = %+v", defaultOrder)
 	}
+	paginado := ListFilters{Limit: 500, Offset: -5}
+	paginado.Normalize()
+	if paginado.Limit != MaxListLimit || paginado.Offset != 0 {
+		t.Fatalf("paginación fuera de rango = %+v", paginado)
+	}
+	sinPaginar := ListFilters{}
+	sinPaginar.Normalize()
+	if sinPaginar.Limit != DefaultListLimit || sinPaginar.Offset != 0 {
+		t.Fatalf("paginación por defecto = %+v", sinPaginar)
+	}
 	invalid := ListFilters{FechaInicio: "2026-13-40"}
 	if err := invalid.Validate(); err == nil {
 		t.Fatal("fecha inválida aceptada")

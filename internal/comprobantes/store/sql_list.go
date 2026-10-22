@@ -1,7 +1,14 @@
 package store
 
-// ListSQL es la consulta de auditoría legacy. Devuelve como máximo 100 filas.
-// El orden se añade con orderClause para no duplicar el cuerpo del CTE.
+import (
+	"fmt"
+
+	"glauk/internal/comprobantes/domain"
+)
+
+// ListSQL es la consulta de auditoría legacy. El orden, el límite y el offset
+// se añaden con orderClause para no duplicar el cuerpo del CTE. El total del
+// universo filtrado se obtiene con COUNT(*) OVER() en la misma consulta.
 const ListSQL = `
 WITH impactos_ordenados AS (
     SELECT hash_largo, hash_corto, url_imagen, usuario_raw, grupo_raw, caption, timestamp_msg,
@@ -60,16 +67,30 @@ WITH impactos_ordenados AS (
       AND (NULLIF($3::text, '') IS NULL OR c.creado_en >= NULLIF($3::text, '')::date)
       AND (NULLIF($4::text, '') IS NULL OR c.creado_en <= (NULLIF($4::text, '')::date + INTERVAL '1 day' - INTERVAL '1 second'))
 )
-SELECT * FROM datos
+SELECT *, COUNT(*) OVER() AS total_registros FROM datos
 WHERE ($1::text = '' OR UPPER(TRIM(rol_socio_1)) = UPPER(TRIM($1::text)) OR UPPER(TRIM(rol_socio_2)) = UPPER(TRIM($1::text)))
   AND ($2::text = '' OR
        UPPER(TRIM(CASE WHEN esta_liquidado THEN socio_1 ELSE fb_socio_1 END)) = UPPER(TRIM($2::text)) OR
        UPPER(TRIM(CASE WHEN esta_liquidado THEN socio_2 ELSE fb_socio_2 END)) = UPPER(TRIM($2::text)))
 `
 
-func orderClause(ascending bool) string {
-	if ascending {
-		return "\nORDER BY fecha_hora_comprobante ASC\nLIMIT 100"
+// orderClause añade el orden y la ventana paginada. limit/offset llegan ya
+// normalizados, pero se acotan otra vez para que ningún llamador pueda saltarse
+// el tope de filas por página.
+func orderClause(ascending bool, limit, offset int) string {
+	if limit <= 0 {
+		limit = domain.DefaultListLimit
 	}
-	return "\nORDER BY fecha_hora_comprobante DESC\nLIMIT 100"
+	if limit > domain.MaxListLimit {
+		limit = domain.MaxListLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	direction := "DESC"
+	if ascending {
+		direction = "ASC"
+	}
+	return fmt.Sprintf("\nORDER BY fecha_hora_comprobante %s\nLIMIT %d OFFSET %d",
+		direction, limit, offset)
 }

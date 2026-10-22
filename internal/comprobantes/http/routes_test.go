@@ -16,7 +16,7 @@ import (
 )
 
 type stubService struct {
-	list    func(context.Context, domain.ListFilters) ([]domain.Comprobante, error)
+	list    func(context.Context, domain.ListFilters) ([]domain.Comprobante, int, error)
 	latest  func(context.Context) (domain.LoteTasa, error)
 	history func(context.Context) ([]domain.LoteTasa, error)
 	liquid  func(context.Context, dto.LiquidarInput) (domain.Liquidacion, error)
@@ -28,11 +28,11 @@ type stubService struct {
 	dq      func(context.Context, string) error
 }
 
-func (s stubService) List(ctx context.Context, f domain.ListFilters) ([]domain.Comprobante, error) {
+func (s stubService) List(ctx context.Context, f domain.ListFilters) ([]domain.Comprobante, int, error) {
 	if s.list != nil {
 		return s.list(ctx, f)
 	}
-	return []domain.Comprobante{}, nil
+	return []domain.Comprobante{}, 0, nil
 }
 func (s stubService) Latest(ctx context.Context) (domain.LoteTasa, error) {
 	if s.latest != nil {

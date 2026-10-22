@@ -22,8 +22,8 @@ type stubRepo struct {
 	deleteErr error
 }
 
-func (s *stubRepo) ListRows(context.Context, domain.ListFilters) ([]calc.SourceRow, error) {
-	return s.listRows, nil
+func (s *stubRepo) ListRows(context.Context, domain.ListFilters) ([]calc.SourceRow, int, error) {
+	return s.listRows, len(s.listRows), nil
 }
 func (s *stubRepo) Fundda(context.Context) (calc.Profile, error)       { return s.fundda, nil }
 func (s *stubRepo) Liquidar(context.Context, domain.Liquidacion) error { return s.liquidar }
@@ -74,7 +74,7 @@ func (t *stubTx) DeleteComprobante(context.Context, string) error {
 
 func TestListRejectsInvalidDates(t *testing.T) {
 	serv := New(&stubRepo{})
-	_, err := serv.List(context.Background(), domain.ListFilters{FechaInicio: "2026-13-40"})
+	_, _, err := serv.List(context.Background(), domain.ListFilters{FechaInicio: "2026-13-40"})
 	var validation *domain.ValidationError
 	if !errors.As(err, &validation) {
 		t.Fatalf("error = %v, esperado ValidationError", err)
@@ -86,7 +86,7 @@ func TestListProjectsRows(t *testing.T) {
 		listRows: []calc.SourceRow{{HashLargo: "h1", Monto: 100, Moneda: "COP"}},
 		fundda:   calc.Profile{},
 	}
-	items, err := New(repo).List(context.Background(), domain.ListFilters{})
+	items, _, err := New(repo).List(context.Background(), domain.ListFilters{})
 	if err != nil || len(items) != 1 || items[0].HashLargo != "h1" {
 		t.Fatalf("items=%+v err=%v", items, err)
 	}
