@@ -12,7 +12,6 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=build /out/glauk /app/glauk
-COPY --from=build /src/public /app/public
 ENV PORT=3000
 EXPOSE 3000
 USER nonroot:nonroot

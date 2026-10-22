@@ -12,10 +12,9 @@ import (
 	tasashttp "glauk/internal/tasas/http"
 )
 
-// registerRoutes sigue el orden normativo de la seccion 5.12. Las rutas
-// canonicas se registran antes que los alias; los alias especificos antes que
-// los generales; /api/* desconocido se resuelve antes del fallback estatico y
-// de la SPA. Las dependencias ya vienen construidas por wire.
+// registerRoutes registra la API completa. Las rutas canonicas van antes que
+// los alias y estos antes que las rutas generales. Las dependencias ya vienen
+// construidas por wire.
 func registerRoutes(app *fiber.App, deps *Dependencies) error {
 	if app == nil || deps == nil || deps.Config == nil {
 		return fmt.Errorf("dependencias de rutas incompletas")
@@ -28,7 +27,7 @@ func registerRoutes(app *fiber.App, deps *Dependencies) error {
 	registerLegacySpecific(app, deps)
 	registerLegacyGeneral(app, deps)
 	registerAtenea(app, deps)
-	registerFallbacks(app, deps)
+	registerFallbacks(app)
 	return nil
 }
 
@@ -62,19 +61,16 @@ func registerCanonical(app *fiber.App, deps *Dependencies) error {
 	return nil
 }
 
-// registerFallbacks instala la frontera final. RegisterStatic ya agrega el 404
-// JSON para /api antes de intentar servir archivos; el Use final cubre metodos
-// que no son GET/HEAD y no deben caer en la SPA.
-func registerFallbacks(app *fiber.App, deps *Dependencies) {
+// registerFallbacks instala la frontera final: 405 para rutas conocidas con
+// metodo incorrecto y 404 JSON para todo lo demas.
+func registerFallbacks(app *fiber.App) {
 	app.Use(methodNotAllowed(app.GetRoutes(true)))
-	httpx.RegisterStatic(app, deps.Config)
 	app.Use(globalNotFound)
 }
 
-// globalNotFound es la ultima frontera para metodos que no llegan a la SPA.
-// Devuelve siempre el envelope canonico con requestId, igual que el 404 de
-// /api, de modo que un cliente programatico nunca reciba HTML por accidente.
-// No registra rutas: se monta con Use despues de RegisterStatic.
+// globalNotFound es la ultima frontera de la API. Devuelve siempre el envelope
+// canonico con requestId, de modo que un cliente programatico nunca reciba
+// HTML por accidente. No registra rutas: se monta con Use.
 // Su contenido no depende de la configuracion ni del entorno.
 func globalNotFound(c *fiber.Ctx) error {
 	return httpx.Fail(c, fiber.StatusNotFound, "NOT_FOUND", "recurso no encontrado")

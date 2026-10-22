@@ -1,14 +1,15 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Verifica el presupuesto de lineas del repositorio Core.
+    Verifica el presupuesto de lineas del backend Go.
 
 .DESCRIPTION
     Reglas:
       * Go de produccion: 30..200 lineas.
       * Go de pruebas (*_test.go): <= 220 lineas.
-      * HTML: <= 180 lineas.
-      * JavaScript y CSS: <= 250 lineas, ignorando public/shared/vendor/.
+
+    El frontend vive en el repositorio glauk-ui; este script no evalua
+    HTML, JavaScript ni CSS.
 
     Sale con 1 si existe al menos una violacion. Con el repositorio limpio
     imprime el resumen y sale con 0.
@@ -37,60 +38,21 @@ function Get-RelativePath {
     return $Path.Substring($Root.Length).TrimStart('\', '/')
 }
 
-$files = Get-ChildItem -LiteralPath $Root -Recurse -File |
-    Where-Object { $_.Extension -in @('.go', '.html', '.js', '.css') }
+$files = Get-ChildItem -LiteralPath $Root -Recurse -File -Filter '*.go'
 
 foreach ($file in $files) {
     $relative = Get-RelativePath $file.FullName
-    $extension = $file.Extension.ToLowerInvariant()
-
-    # El vendor de terceros no forma parte del presupuesto propio.
-    if (($extension -eq '.js' -or $extension -eq '.css') -and
-        $relative -match '(^|[\\/])public[\\/]shared[\\/]vendor([\\/]|$)') {
-        continue
-    }
-
-    # La shell y los modulos importados de glauk2 se conservan con paridad
-    # visual 1:1. Recortarlos o partirlos artificialmente alteraria la interfaz,
-    # por lo que esta UI queda fuera del presupuesto de lineas.
-    if ($extension -in @('.html', '.js') -and
-        $relative -match '^public[\\/]comprobantes([\\/]|$)') {
-        continue
-    }
-
     $lineCount = [System.IO.File]::ReadAllLines($file.FullName).Count
-    $rule = $null
-    $minimum = $null
-    $maximum = $null
 
-    switch ($extension) {
-        '.go' {
-            if ($file.Name -like '*_test.go') {
-                $rule = 'Go test'
-                $maximum = 220
-            }
-            else {
-                $rule = 'Go produccion'
-                $minimum = 30
-                $maximum = 200
-            }
-        }
-        '.html' {
-            $rule = 'HTML'
-            $maximum = 180
-        }
-        '.js' {
-            $rule = 'JavaScript'
-            $maximum = 250
-        }
-        '.css' {
-            $rule = 'CSS'
-            $maximum = 250
-        }
+    if ($file.Name -like '*_test.go') {
+        $rule = 'Go test'
+        $minimum = $null
+        $maximum = 220
     }
-
-    if (-not $rule) {
-        continue
+    else {
+        $rule = 'Go produccion'
+        $minimum = 30
+        $maximum = 200
     }
 
     $evaluated++
@@ -114,9 +76,8 @@ foreach ($file in $files) {
 }
 
 Write-Host ''
-Write-Host '=== Presupuesto de lineas ==='
+Write-Host '=== Presupuesto de lineas (Go) ==='
 Write-Host ("Archivos evaluados: {0}" -f $evaluated)
-Write-Host ("Vendor excluido: public/shared/vendor/ (solo JS/CSS)")
 Write-Host ''
 
 if ($violations.Count -gt 0) {
@@ -130,6 +91,6 @@ if ($violations.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'OK: todos los archivos cumplen el presupuesto de lineas.'
+Write-Host 'OK: todos los archivos Go cumplen el presupuesto de lineas.'
 Write-Host ''
 exit 0

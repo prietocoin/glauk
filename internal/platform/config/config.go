@@ -10,7 +10,6 @@ import (
 type Config struct {
 	AppEnv          string
 	Port            int
-	PublicDir       string
 	ShutdownTimeout time.Duration
 	TimeZone        string
 	EnablePprof     bool
@@ -52,15 +51,12 @@ type EvolutionConfig struct {
 }
 
 type HTTPConfig struct {
-	BodyLimit       int
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	IdleTimeout     time.Duration
-	AllowedOrigins  []string
-	HostRoutingMode string
-	DefaultTenant   string
-	TrustedProxy    string
-	SecurityAPIKey  string
+	BodyLimit      int
+	ReadTimeout    time.Duration
+	WriteTimeout   time.Duration
+	IdleTimeout    time.Duration
+	AllowedOrigins []string
+	SecurityAPIKey string
 }
 
 type ReportConfig struct {
@@ -80,10 +76,6 @@ type HOOConfig struct {
 }
 
 type TenantConfig struct {
-	Tasas          []string
-	Perfiles       []string
-	Comprobantes   []string
-	Reportes       []string
 	JIDGrupoPrueba string
 }
 

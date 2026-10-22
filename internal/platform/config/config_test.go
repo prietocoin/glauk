@@ -182,6 +182,22 @@ func TestDurationAndCSVParsing(t *testing.T) {
 	}
 }
 
+func TestDefaultCORSOrigins(t *testing.T) {
+	cfg, errs := loadFrom(map[string]string{}, "development")
+	if len(errs) > 0 {
+		t.Fatalf("errores inesperados: %v", errs)
+	}
+	want := []string{"https://automat-glauk-ui.fyi6ur.easypanel.host", "http://localhost:*"}
+	if len(cfg.HTTP.AllowedOrigins) != len(want) {
+		t.Fatalf("CORS = %#v", cfg.HTTP.AllowedOrigins)
+	}
+	for i := range want {
+		if cfg.HTTP.AllowedOrigins[i] != want[i] {
+			t.Fatalf("CORS[%d] = %q", i, cfg.HTTP.AllowedOrigins[i])
+		}
+	}
+}
+
 func TestValidProductionConfiguration(t *testing.T) {
 	cfg, errs := loadFrom(map[string]string{
 		"DATABASE_URL":         "postgres://glauk:secret@db:5432/glauk?sslmode=require",

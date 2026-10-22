@@ -44,9 +44,6 @@ func (c *Config) validateCore(errs *Errors) {
 	if c.Port < 1 || c.Port > 65535 {
 		*errs = append(*errs, "PORT debe estar entre 1 y 65535")
 	}
-	if strings.TrimSpace(c.PublicDir) == "" {
-		*errs = append(*errs, "PUBLIC_DIR no puede estar vacío")
-	}
 	if c.ShutdownTimeout <= 0 {
 		*errs = append(*errs, "SHUTDOWN_TIMEOUT debe ser positivo")
 	}
@@ -122,15 +119,5 @@ func (c *Config) validateHTTP(errs *Errors) {
 	}
 	if len(c.HTTP.AllowedOrigins) == 0 {
 		*errs = append(*errs, "CORS_ALLOWED_ORIGINS no puede estar vacío")
-	}
-	switch c.HTTP.HostRoutingMode {
-	case "host", "path", "both":
-	default:
-		*errs = append(*errs, "HOST_ROUTING_MODE debe ser host, path o both")
-	}
-	switch c.HTTP.DefaultTenant {
-	case "tasas", "perfiles", "comprobantes", "reportes", "none":
-	default:
-		*errs = append(*errs, "DEFAULT_TENANT debe ser tasas, perfiles, comprobantes, reportes o none")
 	}
 }

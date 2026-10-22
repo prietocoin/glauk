@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	nethttp "net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -69,12 +67,8 @@ func (stubSender) EnviarTexto(context.Context, reportes.MensajeTexto) (reportes.
 
 func testDependencies(t *testing.T) *Dependencies {
 	t.Helper()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("panel"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	cfg := &config.Config{
-		AppEnv: "test", Port: 3000, PublicDir: dir,
+		AppEnv: "test", Port: 3000,
 		HTTP: config.HTTPConfig{BodyLimit: 20 << 20},
 	}
 	service := reportes.NewService(stubSocios{}, stubMovimientos{}, stubSender{}, reportes.Config{})
@@ -202,6 +196,6 @@ func TestUnknownAPIStaysJSON(t *testing.T) {
 		t.Fatalf("404 de API con envelope inesperado: %v", envelope)
 	}
 	if strings.Contains(string(body), "panel") {
-		t.Fatalf("el 404 de API cayó al SPA: %s", body)
+		t.Fatalf("el 404 de API devolvió HTML: %s", body)
 	}
 }

@@ -68,8 +68,7 @@ func AccessLog(log *slog.Logger) fiber.Handler {
 	}
 }
 
-// SecurityHeaders applies the baseline policy to every response. CSP is added
-// only when static HTML is served, because the API never returns HTML.
+// SecurityHeaders applies the baseline policy to every API response.
 func SecurityHeaders() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		c.Set("X-Content-Type-Options", "nosniff")

@@ -16,7 +16,6 @@ services:
     environment:
       APP_ENV: development
       PORT: "3000"
-      PUBLIC_DIR: /app/public
       TZ: UTC
       LOG_LEVEL: info
       LOG_FORMAT: json
@@ -24,7 +23,7 @@ services:
       DATABASE_URL: "postgres://${POSTGRES_USER:-glauk}:${POSTGRES_PASSWORD:-glauk}@postgres:5432/${POSTGRES_DB:-glauk}?sslmode=disable"
       EVOLUTION_API_URL: ""
       EVOLUTION_INSTANCE: Glauk
-      CORS_ALLOWED_ORIGINS: "*"
+      CORS_ALLOWED_ORIGINS: "https://automat-glauk-ui.fyi6ur.easypanel.host,http://localhost:*"
     networks:
       - edge
       - db

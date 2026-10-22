@@ -1,10 +1,11 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Verifica las prohibiciones arquitectonicas del plan de consolidacion.
+    Verifica las prohibiciones arquitectonicas del backend Go.
 
 .DESCRIPTION
-    Comprueba, sobre codigo Go de produccion:
+    El frontend vive en el repositorio glauk-ui; este script solo inspecciona
+    codigo Go de produccion del backend. Comprueba:
       1. internal/reportes (raiz y http) no depende de pgx, perfiles,
          comprobantes, tasas ni platform/postgres.
       2. Solo platform/config lee variables de entorno.

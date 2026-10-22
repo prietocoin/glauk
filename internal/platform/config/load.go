@@ -20,7 +20,6 @@ func build(l lookupFunc, appEnv string) (*Config, Errors) {
 	cfg := &Config{
 		AppEnv:          appEnv,
 		Port:            defaultPort,
-		PublicDir:       envString(l, "PUBLIC_DIR", "./public"),
 		ShutdownTimeout: defaultShutdownTime,
 		TimeZone:        envString(l, "TZ", "UTC"),
 		Log: LogConfig{
@@ -50,15 +49,13 @@ func build(l lookupFunc, appEnv string) (*Config, Errors) {
 			RetryBase:  300 * time.Millisecond,
 		},
 		HTTP: HTTPConfig{
-			BodyLimit:       defaultBodyLimit,
-			ReadTimeout:     15 * time.Second,
-			WriteTimeout:    90 * time.Second,
-			IdleTimeout:     60 * time.Second,
-			AllowedOrigins:  envCSV(l, "CORS_ALLOWED_ORIGINS", []string{"*"}),
-			HostRoutingMode: envString(l, "HOST_ROUTING_MODE", "both"),
-			DefaultTenant:   envString(l, "DEFAULT_TENANT", "comprobantes"),
-			TrustedProxy:    envString(l, "TRUSTED_PROXY_HEADER", ""),
-			SecurityAPIKey:  envString(l, "SECURITY_API_KEY", ""),
+			BodyLimit:    defaultBodyLimit,
+			ReadTimeout:  15 * time.Second,
+			WriteTimeout: 90 * time.Second,
+			IdleTimeout:  60 * time.Second,
+			AllowedOrigins: envCSV(l, "CORS_ALLOWED_ORIGINS",
+				[]string{"https://automat-glauk-ui.fyi6ur.easypanel.host", "http://localhost:*"}),
+			SecurityAPIKey: envString(l, "SECURITY_API_KEY", ""),
 		},
 		Report: ReportConfig{
 			ImageMaxBytes:  defaultImageBytes,
@@ -74,10 +71,6 @@ func build(l lookupFunc, appEnv string) (*Config, Errors) {
 			Timeout: 10 * time.Second,
 		},
 		Tenants: TenantConfig{
-			Tasas:          envCSV(l, "TENANT_TASAS_HOSTS", []string{"tasas.localhost"}),
-			Perfiles:       envCSV(l, "TENANT_PERFILES_HOSTS", []string{"perfiles.localhost"}),
-			Comprobantes:   envCSV(l, "TENANT_COMPROBANTES_HOSTS", []string{"comprobantes.localhost"}),
-			Reportes:       envCSV(l, "TENANT_REPORTES_HOSTS", []string{"reportes.localhost"}),
 			JIDGrupoPrueba: envString(l, "JID_GRUPO_PRUEBA", ""),
 		},
 	}
