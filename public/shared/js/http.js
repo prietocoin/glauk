@@ -1,3 +1,5 @@
+import { apiUrl } from './api-base.js';
+
 const DEFAULT_TIMEOUT = 15000;
 
 export class HTTPError extends Error {
@@ -61,7 +63,7 @@ export async function request(path, options = {}) {
     }
   }
   try {
-    const response = await fetch(`${path}${queryString(params)}`, {
+    const response = await fetch(`${apiUrl(path)}${queryString(params)}`, {
       method, headers: requestHeaders, body: payload,
       credentials: 'same-origin', signal: controller.signal
     });

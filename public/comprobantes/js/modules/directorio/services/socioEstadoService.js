@@ -3,6 +3,8 @@
  * @description Manejador atómico para conmutar el switch de WhatsApp (WA) de un socio.
  */
 
+import { apiUrl } from '../../../../../shared/js/api-base.js';
+
 /**
  * Invierte el estado de activación de WhatsApp del socio y persiste el cambio.
  * @param {Object} socio - Objeto del socio a modificar.
@@ -23,7 +25,7 @@ export async function alternarEstadoSocioWA(socio) {
   socio.mostrar = mostrarObj;
 
   try {
-    const response = await fetch(`/api/socios/${encodeURIComponent(socio.nombre)}/estado`, {
+    const response = await fetch(apiUrl(`/api/socios/${encodeURIComponent(socio.nombre)}/estado`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

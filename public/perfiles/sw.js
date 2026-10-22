@@ -1,4 +1,4 @@
-const CACHE = 'glauk-perfiles-v2';
+const CACHE = 'glauk-perfiles-v3';
 const ASSETS = [
   './', './index.html', './manifest.json',
   './css/tailwind.css', './css/perfiles.css',
@@ -8,8 +8,9 @@ const ASSETS = [
   './js/components/reglas-editor.js',
   './js/controllers/directorio.js', './js/controllers/editor.js',
   './js/controllers/acciones.js',
-  '../shared/js/dom.js', '../shared/js/http.js',
-  '../shared/brand/favicon.svg', '../shared/brand/logo-fundablock.png'
+  '../shared/js/dom.js', '../shared/js/http.js', '../shared/js/api-base.js',
+  '../shared/brand/favicon.svg',
+  '../shared/brand/icon-192.png', '../shared/brand/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -26,7 +27,10 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
-  if (url.origin !== location.origin || url.pathname === '/api' || url.pathname.startsWith('/api/')) return;
+  if (url.origin !== location.origin) return;
+  // La configuración de despliegue y las APIs nunca se cachean. El filtro
+  // incluye prefijos como /gateway/api/ para no servir respuestas dinámicas.
+  if (url.pathname === '/api' || url.pathname.includes('/api/') || url.pathname.endsWith('/config.js')) return;
   event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
     if (!response.ok || response.type !== 'basic') return response;
     const copy = response.clone();

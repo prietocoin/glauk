@@ -4,6 +4,8 @@
  * Prepara el payload completo con los JSONB de 'mostrar' y 'monedas' para evitar sobrescrituras corruptas.
  */
 
+import { apiUrl } from '../../../../../shared/js/api-base.js';
+
 /**
  * Alterna la bandera de herencia de un socio y guarda su configuración.
  * @param {Object} socio - Objeto del socio a modificar.
@@ -37,7 +39,7 @@ export async function alternarHerenciaSocio(socio) {
   };
 
   try {
-    const response = await fetch('/api/socios/config', {
+    const response = await fetch(apiUrl('/api/socios/config'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

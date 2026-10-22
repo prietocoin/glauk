@@ -3,6 +3,8 @@
  * @description Mapeo y persistencia para el modal de configuración de socios.
  */
 
+import { apiUrl } from '../../../../../shared/js/api-base.js';
+
 /**
  * Prepara el objeto borrador para vincular en el formulario del modal.
  * @param {Object} socioObj - Datos crudos del socio.
@@ -82,7 +84,7 @@ export async function guardarConfiguracionSocio(socioConfigEdit) {
     monedas: monedasFinales
   };
 
-  const response = await fetch('/api/socios/config', {
+  const response = await fetch(apiUrl('/api/socios/config'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)

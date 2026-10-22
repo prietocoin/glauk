@@ -8,6 +8,8 @@ import {
   obtenerTasaSocioCalculada, claseInsignia, formatDiaHora
 } from '../utils/comprobantesFormatters.js';
 
+import { apiUrl } from '../../../../../shared/js/api-base.js';
+
 import {
   calcularSociosPendientesConsolidado,
   calcularMovimientoFiltradoTotal
@@ -221,7 +223,7 @@ export function comprobantesState() {
         const rango = this.reporteFechaInicio && this.reporteFechaFin
           ? ` | ${this.reporteFechaInicio} al ${this.reporteFechaFin}`
           : '';
-        const response = await fetch('/api/v1/reportes/imagen', {
+        const response = await fetch(apiUrl('/api/v1/reportes/imagen'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

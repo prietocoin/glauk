@@ -1,3 +1,5 @@
+import { apiUrl } from '../../shared/js/api-base.js';
+
 const BASE = '/api/v1/tasas';
 
 async function solicitarJson(ruta, opciones = {}) {
@@ -5,7 +7,7 @@ async function solicitarJson(ruta, opciones = {}) {
   if (init.body && !init.headers) {
     init.headers = { 'Content-Type': 'application/json' };
   }
-  const respuesta = await fetch(`${BASE}${ruta}`, init);
+  const respuesta = await fetch(apiUrl(`${BASE}${ruta}`), init);
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok || datos.success === false) {
     throw new Error(datos.error || `Error HTTP ${respuesta.status}`);
@@ -63,7 +65,7 @@ export const api = {
   },
 
   async renderBlob(nombre) {
-    const respuesta = await fetch(`${BASE}/render/${encodeURIComponent(nombre)}`);
+    const respuesta = await fetch(apiUrl(`${BASE}/render/${encodeURIComponent(nombre)}`));
     if (!respuesta.ok) throw new Error('Error al renderizar');
     return respuesta.blob();
   }

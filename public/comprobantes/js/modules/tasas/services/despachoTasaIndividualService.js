@@ -4,6 +4,8 @@
  * Valida lote/socio, solicita confirmación e invoca el endpoint HTTP.
  */
 
+import { apiUrl } from '../../../../../shared/js/api-base.js';
+
 /**
  * Dispara el envío de la cartelera de un socio específico a la API de backend.
  * @param {string} loteActivo - Identificador del lote (ej. 'T052').
@@ -28,7 +30,7 @@ export async function despacharTasaIndividual(loteActivo, socioObj, fuerzaModoPr
   if (!confirmacion) return false;
 
   try {
-    const response = await fetch('/api/v1/tasas/disparar', {
+    const response = await fetch(apiUrl('/api/v1/tasas/disparar'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

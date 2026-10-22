@@ -3,6 +3,8 @@
  * @description Acciones masivas e individuales administrativas para el directorio en glauk2.
  */
 
+import { apiUrl } from '../../../../../shared/js/api-base.js';
+
 /**
  * Desactiva el envío de tasas de todos los socios del directorio.
  * @returns {Promise<boolean>}
@@ -10,7 +12,7 @@
 export async function apagarTodosLosSocios() {
   if (!confirm('¿Deseas apagar/desactivar todas las carteleras de los socios?')) return false;
   try {
-    const response = await fetch('/api/socios/desactivar-todos', { method: 'PATCH' });
+    const response = await fetch(apiUrl('/api/socios/desactivar-todos'), { method: 'PATCH' });
     const res = await response.json();
     return Boolean(response.ok && res.success);
   } catch (err) {
@@ -24,7 +26,7 @@ export async function apagarTodosLosSocios() {
  */
 export async function memorizarSociosVigentes() {
   try {
-    const response = await fetch('/api/socios/guardar-vigentes', { method: 'POST' });
+    const response = await fetch(apiUrl('/api/socios/guardar-vigentes'), { method: 'POST' });
     const res = await response.json();
     if (response.ok && res.success) {
       alert('Plantilla de socios vigentes memorizada.');
@@ -43,7 +45,7 @@ export async function memorizarSociosVigentes() {
  */
 export async function restaurarSociosVigentes() {
   try {
-    const response = await fetch('/api/socios/restaurar-vigentes', { method: 'POST' });
+    const response = await fetch(apiUrl('/api/socios/restaurar-vigentes'), { method: 'POST' });
     const res = await response.json();
     if (response.ok && res.success) {
       alert('Socios vigentes restaurados.');
@@ -65,7 +67,7 @@ export async function restaurarSociosVigentes() {
 export async function eliminarSocioDelDirectorio(nombreSocio) {
   if (!nombreSocio || !confirm(`¿Eliminar permanentemente a ${nombreSocio}?`)) return false;
   try {
-    const response = await fetch(`/api/directorio/${encodeURIComponent(nombreSocio)}`, {
+    const response = await fetch(apiUrl(`/api/directorio/${encodeURIComponent(nombreSocio)}`), {
       method: 'DELETE'
     });
     const res = await response.json();

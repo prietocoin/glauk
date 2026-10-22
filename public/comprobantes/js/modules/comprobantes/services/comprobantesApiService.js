@@ -5,7 +5,9 @@
  * glauk2 sobre el contrato /api/v1/comprobantes.
  */
 
-const API_URL = '/api/comprobantes';
+import { apiUrl } from '../../../../../shared/js/api-base.js';
+
+const API_RUTA = '/api/comprobantes';
 
 function obtenerIdentificadorValido(identificador, fallbackPayload = {}) {
   let target = '';
@@ -116,7 +118,7 @@ async function consultarLista(params = {}) {
     hash = ''
   } = params;
 
-  const url = new URL(API_URL, window.location.origin);
+  const url = new URL(apiUrl(API_RUTA), window.location.origin);
   const socioNormalizado = String(socio || '').trim().toUpperCase();
   if (socioNormalizado && socioNormalizado !== 'TODOS' && socioNormalizado !== 'TODOS LOS SOCIOS' && socioNormalizado !== 'GENERAL') {
     url.searchParams.append('socio', String(socio).trim());
@@ -222,7 +224,7 @@ export async function guardarCambiosComprobante(hashLargo, payload = {}, loteAct
     const body = { ...dataPayload, loteActivo };
     if (!body.lote_tasa_asignado && !body.lote_tasa) body.lote_tasa_asignado = loteActivo;
 
-    const res = await fetch(`${API_URL}/${encodeURIComponent(idValido)}`, {
+    const res = await fetch(apiUrl(`${API_RUTA}/${encodeURIComponent(idValido)}`), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -246,7 +248,7 @@ export async function solicitarRelecturaIA(hashLargo) {
       throw new Error('No se proporcionó un hash o ID válido para releer con IA');
     }
 
-    const res = await fetch(`${API_URL}/${encodeURIComponent(idValido)}/releer`, {
+    const res = await fetch(apiUrl(`${API_RUTA}/${encodeURIComponent(idValido)}/releer`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -269,7 +271,7 @@ export async function eliminarComprobantePorHash(hashLargo) {
       throw new Error('No se proporcionó un hash o ID válido para eliminar');
     }
 
-    const res = await fetch(`${API_URL}/${encodeURIComponent(idValido)}`, {
+    const res = await fetch(apiUrl(`${API_RUTA}/${encodeURIComponent(idValido)}`), {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' }
     });
