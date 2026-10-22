@@ -64,6 +64,9 @@ function ordenarLista(lista, orden) {
 
 const LIMITE_API = 100;
 const MAXIMO_CONSULTA = 500;
+// Tope interno para recuperar datos cuando el filtro de socio del backend
+// devuelve cero aunque existan filas. La UI sigue mostrando como máximo 500.
+export const MAXIMO_RECUPERACION = 2000;
 
 function fechaISO(fecha) {
   const y = fecha.getFullYear();
@@ -114,8 +117,9 @@ async function consultarLista(params = {}) {
   } = params;
 
   const url = new URL(API_URL, window.location.origin);
-  if (socio && socio.toUpperCase() !== 'TODOS' && socio.toUpperCase() !== 'TODOS LOS SOCIOS') {
-    url.searchParams.append('socio', socio.trim());
+  const socioNormalizado = String(socio || '').trim().toUpperCase();
+  if (socioNormalizado && socioNormalizado !== 'TODOS' && socioNormalizado !== 'TODOS LOS SOCIOS' && socioNormalizado !== 'GENERAL') {
+    url.searchParams.append('socio', String(socio).trim());
   }
   if (rol && rol.toUpperCase() !== 'TODOS') url.searchParams.append('rol', rol.trim());
   if (fechaInicio) url.searchParams.append('fechaInicio', fechaInicio.trim());
@@ -138,12 +142,13 @@ async function consultarLista(params = {}) {
 }
 
 /**
- * Reúne hasta 500 comprobantes respetando el tope físico de 100 filas por
+ * Reúne hasta el tope solicitado respetando el límite físico de 100 filas por
  * consulta del backend. Si un bloque llega lleno, parte el rango de fechas y
- * consulta los dos subrangos; así el scroll puede crecer sin tocar Go.
+ * consulta los dos subrangos. El máximo de recuperación es 2000; la UI
+ * normal sigue solicitando 500.
  */
 export async function fetchComprobantesHasta(params = {}, maximo = MAXIMO_CONSULTA) {
-  const tope = Math.min(Math.max(Number(maximo) || MAXIMO_CONSULTA, 1), MAXIMO_CONSULTA);
+  const tope = Math.min(Math.max(Number(maximo) || MAXIMO_CONSULTA, 1), MAXIMO_RECUPERACION);
   const acumulado = [];
   const vistos = new Set();
 

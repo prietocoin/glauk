@@ -13,26 +13,13 @@ import {
   calcularMovimientoFiltradoTotal
 } from '../services/saldosCalculatorService.js';
 
-import { fetchComprobantesHasta, eliminarComprobantePorHash } from '../services/comprobantesApiService.js';
-import { filtrarPorSocioEstricto, ordenarComprobantes } from '../services/comprobantesFilterService.js';
+import { eliminarComprobantePorHash } from '../services/comprobantesApiService.js';
+import { cargarComprobantesFiltrados } from '../services/comprobantesCargaService.js';
 import { crearAccionesModal } from '../services/comprobantesModalActions.js';
 import { prepararEdicionComprobante, obtenerInsigniaRol } from '../services/comprobantesMapperService.js';
 import { capturarReporteEstadoCuenta } from '../services/comprobantesReporteService.js';
 import { obtenerSaldoAnteriorSocio, obtenerSujetoAuditado } from '../services/comprobantesSaldosService.js';
-
-function obtenerRangoMesActualCaracas() {
-  const timeZone = 'America/Caracas';
-  const ahora = new Date();
-  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
-
-  const primerDia = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
-  const fechaInicio = fmt.format(primerDia);
-
-  const ultimoDia = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0);
-  const fechaFin = fmt.format(ultimoDia);
-
-  return { fechaInicio, fechaFin };
-}
+import { obtenerRangoMesActualCaracas } from '../utils/comprobantesFechaUtils.js';
 
 export function comprobantesState() {
   const { fechaInicio: inicioMes, fechaFin: finMes } = obtenerRangoMesActualCaracas();
@@ -156,13 +143,11 @@ export function comprobantesState() {
           hash: this.filtroHash
         };
 
-        const raw = await fetchComprobantesHasta(params, this.capMaximoDOM);
+        const ordenados = await cargarComprobantesFiltrados(params, {
+          maximo: this.capMaximoDOM,
+          loteActivo: this.loteActivo
+        });
         if (token !== this.solicitudActual) return;
-
-        const lista = Array.isArray(raw) ? raw : [];
-        const mapeados = lista.map(item => prepararEdicionComprobante(item, this.loteActivo));
-        const estrictos = filtrarPorSocioEstricto(mapeados, this.filtroSocio);
-        const ordenados = ordenarComprobantes(estrictos, this.filtroOrden);
 
         this.todosLosItems = ordenados.slice(0, this.capMaximoDOM);
         this.items = this.todosLosItems.slice(0, this.tamanoLote);
@@ -230,12 +215,18 @@ export function comprobantesState() {
 
       try {
         const base64 = await capturarReporteEstadoCuenta(documento, { ancho });
+        const socioReporte = String(socio || this.reporteSocio || '').trim() || 'GENERAL';
+        const pagina = Number(this.reportePaginaSegura) || 1;
+        const totalPaginas = Number(this.reporteTotalPaginas) || 1;
+        const rango = this.reporteFechaInicio && this.reporteFechaFin
+          ? ` | ${this.reporteFechaInicio} al ${this.reporteFechaFin}`
+          : '';
         const response = await fetch('/api/v1/reportes/imagen', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            socio: String(socio || '').trim() || 'GENERAL',
-            caption: 'Estado de cuenta FUNDABLOCK',
+            socio: socioReporte,
+            caption: `Estado de cuenta ${socioReporte}${rango} | Pag. ${pagina}/${totalPaginas}`,
             fileName: `estado-cuenta-${Date.now()}.jpg`,
             mimeType: 'image/jpeg',
             base64

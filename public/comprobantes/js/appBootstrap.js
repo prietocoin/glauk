@@ -7,6 +7,7 @@ import { createRouterState } from './shared/states/routerState.js';
 import { createTasasState } from './modules/tasas/states/tasasState.js';
 import { createDirectorioState } from './modules/directorio/states/directorioState.js';
 import { comprobantesState } from './modules/comprobantes/states/comprobantesState.js';
+import { createComprobantesReporteState } from './modules/comprobantes/states/comprobantesReporteState.js';
 
 /**
  * Copia el estado preservando descriptores. Un spread simple evaluaría los
@@ -26,6 +27,7 @@ function registrarApp() {
     componerEstado(app, createTasasState());
     componerEstado(app, createDirectorioState());
     componerEstado(app, comprobantesState());
+    componerEstado(app, createComprobantesReporteState());
 
     // Vista por defecto
     app.vistaActiva = 'comprobantes';

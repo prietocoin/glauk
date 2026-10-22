@@ -42,11 +42,26 @@ export function claseInsignia(tipoOp) {
 
 export function filtrarComprobantesPorRango(comprobantes, fechaInicio, fechaFin) {
   if (!Array.isArray(comprobantes)) return [];
+
+  if (fechaInicio && typeof fechaInicio === 'object' && !(fechaInicio instanceof Date)) {
+    fechaFin = fechaInicio.fechaFin ?? fechaFin;
+    fechaInicio = fechaInicio.fechaInicio;
+  }
+
+  const inicio = fechaInicio ? new Date(`${String(fechaInicio).trim()}T00:00:00`) : null;
+  const fin = fechaFin ? new Date(`${String(fechaFin).trim()}T23:59:59`) : null;
+  const inicioMs = inicio && !isNaN(inicio.getTime()) ? inicio.getTime() : null;
+  const finMs = fin && !isNaN(fin.getTime()) ? fin.getTime() : null;
+
   return comprobantes.filter(item => {
-    if (!item.fecha) return true;
-    const f = new Date(item.fecha);
-    if (fechaInicio && f < new Date(fechaInicio)) return false;
-    if (fechaFin && f > new Date(fechaFin)) return false;
+    const raw = item?.fecha_hora_comprobante || item?.timestamp_msg || item?.fecha;
+    if (!raw) return true;
+
+    const fecha = new Date(raw);
+    const ms = fecha.getTime();
+    if (isNaN(ms)) return true;
+    if (inicioMs !== null && ms < inicioMs) return false;
+    if (finMs !== null && ms > finMs) return false;
     return true;
   });
 }

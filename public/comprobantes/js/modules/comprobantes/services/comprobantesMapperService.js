@@ -3,6 +3,8 @@
  * @description Mapeador atómico del frontend para la API v2 y la tabla comprobantes_final.
  */
 
+import { extraerNombreSocio } from '../utils/comprobantesSocioUtils.js';
+
 /**
  * Trunca o normaliza el valor numérico de la tasa.
  * Si viene 'N/A', nulo o un valor no válido, retorna 1.0 por defecto.
@@ -96,18 +98,26 @@ export function prepararEdicionComprobante(item = {}, loteActivo = 'T070') {
   const monedaFinal = String(c.moneda || item.moneda || 'USDT').toUpperCase().trim();
 
   // 4. ENTIDADES Y ROLES
-  const socio1Real = String(c.nombre_socio_1 || item.nombre_socio_1 || c.socio_1 || item.socio_1 || c.grupo_1?.grupo || 'GENERAL').trim();
-  const socio2Real = String(c.nombre_socio_2 || item.nombre_socio_2 || c.socio_2 || item.socio_2 || c.grupo_2?.grupo || 'GENERAL').trim();
+  const socio1Real = extraerNombreSocio(item, 1);
+  const socio2Real = extraerNombreSocio(item, 2);
 
-  const rol1 = c.rol_1 || item.rol_1 || c.grupo_1?.rol || 'SOCIO';
-  const rol2 = c.rol_2 || item.rol_2 || c.grupo_2?.rol || 'SOCIO';
+  const rol1 = c.rol_1 || item.rol_1 || c.grupo_1?.rol || c.perfil_1?.rol || 'SOCIO';
+  const rol2 = c.rol_2 || item.rol_2 || c.grupo_2?.rol || c.perfil_2?.rol || 'SOCIO';
 
-  const t1 = truncarTasaComercial(c.tasa_1 ?? item.tasa_1 ?? c.grupo_1?.tasa);
-  const t2 = truncarTasaComercial(c.tasa_2 ?? item.tasa_2 ?? c.grupo_2?.tasa);
+  const t1 = truncarTasaComercial(
+    c.tasa_1 ?? item.tasa_1 ?? c.tasa_socio_1 ?? item.tasa_socio_1 ?? c.t1_tasa ?? item.t1_tasa ?? c.grupo_1?.tasa
+  );
+  const t2 = truncarTasaComercial(
+    c.tasa_2 ?? item.tasa_2 ?? c.tasa_socio_2 ?? item.tasa_socio_2 ?? c.t2_tasa ?? item.t2_tasa ?? c.grupo_2?.tasa
+  );
 
   // PRESERVACIÓN FIEL DE MONTOS INDIVIDUALES DE SOCIO
-  const rawM1 = c.m1_socio ?? item.m1_socio ?? c.monto_1 ?? item.monto_1 ?? c.me1 ?? item.me1 ?? fallbackMonto;
-  const rawM2 = c.m2_socio ?? item.m2_socio ?? c.monto_2 ?? item.monto_2 ?? c.me2 ?? item.me2 ?? fallbackMonto;
+  const rawM1 = c.m1_socio ?? item.m1_socio ?? c.monto_1 ?? item.monto_1 ??
+    c.monto_socio_1 ?? item.monto_socio_1 ?? c.monto_socio1 ?? item.monto_socio1 ??
+    c.t1_monto ?? item.t1_monto ?? c.me1 ?? item.me1 ?? fallbackMonto;
+  const rawM2 = c.m2_socio ?? item.m2_socio ?? c.monto_2 ?? item.monto_2 ??
+    c.monto_socio_2 ?? item.monto_socio_2 ?? c.monto_socio2 ?? item.monto_socio2 ??
+    c.t2_monto ?? item.t2_monto ?? c.me2 ?? item.me2 ?? fallbackMonto;
 
   const calcM1 = Math.abs(parseFloat(String(rawM1).replace(/,/g, '')) || 0).toFixed(2);
   const calcM2 = Math.abs(parseFloat(String(rawM2).replace(/,/g, '')) || 0).toFixed(2);
@@ -115,15 +125,19 @@ export function prepararEdicionComprobante(item = {}, loteActivo = 'T070') {
   // 4.1 POLARIDADES: el contrato canónico la expresa en el signo de me1/me2.
   const signo1 = parseFloat(String(rawM1).replace(/,/g, '')) || 0;
   const signo2 = parseFloat(String(rawM2).replace(/,/g, '')) || 0;
-  const pol1 = c.polaridad_1 || item.polaridad_1 || c.grupo_1?.polaridad || item.grupo_1?.polaridad || (signo1 < 0 ? '-' : '+');
-  const pol2 = c.polaridad_2 || item.polaridad_2 || c.grupo_2?.polaridad || item.grupo_2?.polaridad || (signo2 < 0 ? '-' : (signo2 > 0 ? '+' : '-'));
+  const pol1 = c.polaridad_1 || item.polaridad_1 || c.polaridad_socio_1 || item.polaridad_socio_1 ||
+    c.t1_polaridad || item.t1_polaridad || c.grupo_1?.polaridad || item.grupo_1?.polaridad ||
+    (signo1 < 0 ? '-' : '+');
+  const pol2 = c.polaridad_2 || item.polaridad_2 || c.polaridad_socio_2 || item.polaridad_socio_2 ||
+    c.t2_polaridad || item.t2_polaridad || c.grupo_2?.polaridad || item.grupo_2?.polaridad ||
+    (signo2 < 0 ? '-' : (signo2 > 0 ? '+' : '-'));
 
   // 5. IMAGEN CLOUDFLARE R2
   const rawImg = c.url_r2_comprobante || item.url_r2_comprobante || c.link_img || item.link_img || c.url_imagen || item.url_imagen || '';
 
   // 6. DETECCIÓN ROBUSTA DE BANDERAS SOCIO 2x
-  const s2Upper = socio2Real.toUpperCase();
-  const tieneSocio2Valido = s2Upper !== '' && s2Upper !== 'GENERAL' && s2Upper !== 'NO DEFINIDO' && s2Upper !== 'N/A';
+  const s2Upper = String(socio2Real || '').trim().toUpperCase();
+  const tieneSocio2Valido = !['', 'GENERAL', 'NO DEFINIDO', 'S/D', 'N/A', 'NULL', 'UNDEFINED', '-'].includes(s2Upper);
   const esX2 = (item.es_x2 !== undefined) ? Boolean(item.es_x2) : tieneSocio2Valido;
 
   return {
@@ -179,8 +193,8 @@ export function prepararEdicionComprobante(item = {}, loteActivo = 'T070') {
 
     // REGLAS GENERALES Y LOTES
     es_x2: esX2,
-    tipo_op: String(c.tipo_op || c.tipo_op1 || c.tipo || item.tipo || item.tipo_manual || 'D').split('-')[0].toUpperCase(),
-    tipo_manual: String(c.tipo_manual || c.tipo_op1 || c.tipo || item.tipo || 'D').split('-')[0].toUpperCase(),
+    tipo_op: String(c.tipo_op || c.tipo_op1 || c.t1_tipo || c.tipo || item.tipo || item.tipo_manual || 'D').split('-')[0].toUpperCase(),
+    tipo_manual: String(c.tipo_manual || c.tipo_op1 || c.t1_tipo || c.tipo || item.tipo || 'D').split('-')[0].toUpperCase(),
     moneda: monedaFinal,
     monto: fallbackMonto,
     monto_local: fallbackMonto,

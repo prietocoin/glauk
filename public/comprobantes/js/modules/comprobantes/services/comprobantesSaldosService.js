@@ -6,15 +6,17 @@
  * =================================================================
  */
 
+import { normalizarSocio } from '../utils/comprobantesSocioUtils.js';
+
 export function obtenerSaldoAnteriorSocio(directorio = [], socioNombre = '') {
-  const socioNom = String(socioNombre || '').trim().toUpperCase();
+  const socioNom = normalizarSocio(socioNombre);
   if (!socioNom || socioNom === 'TODOS' || socioNom === 'TODOS LOS SOCIOS' || socioNom === 'GENERAL') {
     return 0;
   }
 
   const socioFound = (directorio || []).find(d => {
     const nom = typeof d === 'string' ? d : (d?.nombre || '');
-    return nom.trim().toUpperCase() === socioNom;
+    return normalizarSocio(nom) === socioNom;
   });
 
   if (typeof socioFound === 'object' && socioFound !== null) {
@@ -31,7 +33,7 @@ export function obtenerSaldoAnteriorSocio(directorio = [], socioNombre = '') {
  */
 export function obtenerSujetoAuditado(filtroSocio = '') {
   if (!filtroSocio) return 'TODOS LOS SOCIOS';
-  const str = String(filtroSocio).trim().toUpperCase();
+  const str = normalizarSocio(filtroSocio);
   if (!str || str === 'TODOS' || str === 'TODOS LOS SOCIOS' || str === 'GENERAL') {
     return 'TODOS LOS SOCIOS';
   }

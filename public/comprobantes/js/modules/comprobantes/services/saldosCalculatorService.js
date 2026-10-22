@@ -3,32 +3,46 @@
  * @description Servicio matemático puro para cálculo algebraico de saldos y movimientos desde comprobantes_final.
  */
 import { filtrarComprobantesPorRango } from '../utils/saldosFilterUtils.js';
+import {
+  normalizarSocio,
+  obtenerNombresSocio,
+  obtenerPosicionSocio
+} from '../utils/comprobantesSocioUtils.js';
+
+/**
+ * Movimiento firmado de un socio en un comprobante. Devuelve 0 si el socio no
+ * participa en la fila, evitando sumar el lado 1 por defecto.
+ */
+export function obtenerMovimientoSocio(item = {}, socioTarget = '') {
+  if (!item) return 0;
+
+  const normalizado = normalizarSocio(socioTarget);
+  const target = ['', 'TODOS', 'TODOS LOS SOCIOS', 'GENERAL'].includes(normalizado)
+    ? ''
+    : normalizado;
+  if (target) {
+    const participa = obtenerNombresSocio(item, 1).has(target)
+      || obtenerNombresSocio(item, 2).has(target);
+    if (!participa) return 0;
+  }
+
+  const posicion = obtenerPosicionSocio(item, target);
+  const valor = posicion === 2
+    ? parseFloat(item.m2_socio ?? item.monto_2 ?? item.monto ?? 0) || 0
+    : parseFloat(item.m1_socio ?? item.monto_1 ?? item.monto ?? 0) || 0;
+  const polaridad = posicion === 2
+    ? (item.polaridad_2 || item.grupo_2?.polaridad || '-')
+    : (item.polaridad_1 || item.grupo_1?.polaridad || '+');
+
+  return valor * (polaridad === '-' ? -1 : 1);
+}
 
 /**
  * Suma o resta los movimientos de un socio en específico considerando su polaridad.
  */
 export function calcularMovimientoFiltradoTotal(comprobantes = [], socioTarget = '') {
   if (!Array.isArray(comprobantes)) return 0;
-  const target = (socioTarget || '').trim().toUpperCase();
-
-  return comprobantes.reduce((sum, item) => {
-    const s1 = (item.nombre_socio_1 || item.socio_1 || '').trim().toUpperCase();
-    const s2 = (item.nombre_socio_2 || item.socio_2 || '').trim().toUpperCase();
-
-    let val = 0;
-    let pol = '+';
-
-    if (target && s2 === target && s1 !== target) {
-      val = parseFloat(item.m2_socio ?? item.monto_2 ?? 0) || 0;
-      pol = item.polaridad_2 || item.grupo_2?.polaridad || '-';
-    } else {
-      val = parseFloat(item.m1_socio ?? item.monto_1 ?? item.monto ?? 0) || 0;
-      pol = item.polaridad_1 || item.grupo_1?.polaridad || '+';
-    }
-
-    const signo = pol === '-' ? -1 : 1;
-    return sum + (val * signo);
-  }, 0);
+  return comprobantes.reduce((sum, item) => sum + obtenerMovimientoSocio(item, socioTarget), 0);
 }
 
 /**
@@ -48,27 +62,14 @@ export function calcularSociosPendientesConsolidado(directorio = [], comprobante
       return (mostrarObj?.dashboard ?? true) !== false;
     })
     .map(socio => {
-      const nombreUpper = (socio.nombre || '').trim().toUpperCase();
+      const nombreUpper = normalizarSocio(socio.nombre);
       const saldoBase = parseFloat(socio.saldo_inicial ?? socio.saldo_anterior) || 0;
-
-      const movimientoHistorico = compFiltrados.reduce((acc, item) => {
-        const s1 = (item.nombre_socio_1 || item.socio_1 || '').trim().toUpperCase();
-        const s2 = (item.nombre_socio_2 || item.socio_2 || '').trim().toUpperCase();
-
-        if (s1 === nombreUpper) {
-          const val1 = parseFloat(item.m1_socio ?? item.monto_1 ?? item.monto) || 0;
-          const pol1 = item.polaridad_1 || item.grupo_1?.polaridad || '+';
-          const signo1 = pol1 === '-' ? -1 : 1;
-          return acc + (val1 * signo1);
-        } else if (s2 === nombreUpper) {
-          const val2 = parseFloat(item.m2_socio ?? item.monto_2) || 0;
-          const pol2 = item.polaridad_2 || item.grupo_2?.polaridad || '-';
-          const signo2 = pol2 === '-' ? -1 : 1;
-          return acc + (val2 * signo2);
-        }
-        return acc;
-      }, 0);
-
+      const movimientoHistorico = nombreUpper
+        ? compFiltrados.reduce(
+          (acc, item) => acc + obtenerMovimientoSocio(item, nombreUpper),
+          0
+        )
+        : 0;
       const saldoFinal = Math.trunc((saldoBase + movimientoHistorico + 0.0000001) * 100) / 100;
 
       return {

@@ -6,28 +6,18 @@
  * =================================================================
  */
 
+import {
+  normalizarSocio,
+  coincideSocioEstricto,
+  obtenerNombresSocio
+} from '../utils/comprobantesSocioUtils.js';
+
+export { normalizarSocio, coincideSocioEstricto } from '../utils/comprobantesSocioUtils.js';
+
 export function limpiarFiltro(val) {
   if (!val) return '';
-  const str = String(val).trim().toUpperCase();
+  const str = normalizarSocio(val);
   return (str === 'TODOS' || str === 'TODOS LOS SOCIOS' || str === 'GENERAL') ? '' : val;
-}
-
-function normalizarSocio(val) {
-  return String(val || '').trim().toUpperCase();
-}
-
-/**
- * Predicado estricto usado por el filtro "Ver Comprobantes" del Dashboard.
- * Solo acepta coincidencia exacta con Socio 1 o Socio 2; no incluye herederos
- * ni coincidencias parciales.
- */
-export function coincideSocioEstricto(item = {}, socio = '') {
-  const objetivo = normalizarSocio(socio);
-  if (!objetivo || objetivo === 'TODOS' || objetivo === 'TODOS LOS SOCIOS') return true;
-
-  const s1 = normalizarSocio(item.nombre_socio_1 || item.socio_1);
-  const s2 = normalizarSocio(item.nombre_socio_2 || item.socio_2);
-  return s1 === objetivo || s2 === objetivo;
 }
 
 export function filtrarPorSocioEstricto(lista = [], socio = '') {
@@ -71,8 +61,7 @@ export function filtrarComprobantesAtómico(listaBase = [], directorio = [], fil
       if (!item.es_x2) return false;
     }
 
-    const s2 = String(item.nombre_socio_2 || item.socio_2 || '').trim().toUpperCase();
-    return Boolean(s2 && s2 !== 'GENERAL' && s2 !== 'NO DEFINIDO' && s2 !== 'S/D');
+    return obtenerNombresSocio(item, 2).size > 0;
   });
 
   const socioBuscado = normalizarSocio(filtros.filtroSocio);
