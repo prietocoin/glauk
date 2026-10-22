@@ -62,52 +62,140 @@ function ordenarLista(lista, orden) {
   }
 }
 
+const LIMITE_API = 100;
+const MAXIMO_CONSULTA = 500;
+
+function fechaISO(fecha) {
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, '0');
+  const d = String(fecha.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseFechaISO(valor) {
+  const texto = String(valor || '').trim();
+  if (!texto) return null;
+  const fecha = new Date(`${texto}T00:00:00`);
+  return isNaN(fecha.getTime()) ? null : fecha;
+}
+
+function dividirRangoFechas(desde, hasta) {
+  const inicio = parseFechaISO(desde);
+  const fin = parseFechaISO(hasta);
+  if (!inicio || !fin || inicio >= fin) return null;
+
+  const dias = Math.floor((fin.getTime() - inicio.getTime()) / 86400000);
+  if (dias < 1) return null;
+
+  const medio = new Date(inicio.getTime() + Math.floor(dias / 2) * 86400000);
+  const siguiente = new Date(medio.getTime() + 86400000);
+
+  return [
+    { desde, hasta: fechaISO(medio) },
+    { desde: fechaISO(siguiente), hasta }
+  ];
+}
+
+function claveItem(item) {
+  const c = item?.comprobante || item || {};
+  const principal = String(c.hash_largo || c.id || c.referencia || '').trim().toLowerCase();
+  if (principal) return principal;
+  return `${c.fecha_hora_comprobante || c.fecha || ''}|${c.monto || ''}|${c.banco || ''}`;
+}
+
+async function consultarLista(params = {}) {
+  const {
+    socio = '',
+    rol = '',
+    fechaInicio = '',
+    fechaFin = '',
+    orden = 'fecha_desc',
+    hash = ''
+  } = params;
+
+  const url = new URL(API_URL, window.location.origin);
+  if (socio && socio.toUpperCase() !== 'TODOS' && socio.toUpperCase() !== 'TODOS LOS SOCIOS') {
+    url.searchParams.append('socio', socio.trim());
+  }
+  if (rol && rol.toUpperCase() !== 'TODOS') url.searchParams.append('rol', rol.trim());
+  if (fechaInicio) url.searchParams.append('fechaInicio', fechaInicio.trim());
+  if (fechaFin) url.searchParams.append('fechaFin', fechaFin.trim());
+  if (hash) url.searchParams.append('hash', hash.trim());
+  if (orden === 'fecha_asc' || orden === 'fecha_desc') url.searchParams.append('orden', orden);
+
+  const res = await fetch(url.toString());
+  const contentType = res.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    console.warn(`[comprobantesApiService ⚠️ Warning]: La API respondió con formato no JSON (${res.status}).`);
+    return { lista: [], truncada: false };
+  }
+  if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+
+  const json = await res.json();
+  const lista = json?.comprobantes || json?.data || (Array.isArray(json) ? json : []);
+  const normalizada = Array.isArray(lista) ? lista : [];
+  return { lista: normalizada, truncada: normalizada.length >= LIMITE_API };
+}
+
+/**
+ * Reúne hasta 500 comprobantes respetando el tope físico de 100 filas por
+ * consulta del backend. Si un bloque llega lleno, parte el rango de fechas y
+ * consulta los dos subrangos; así el scroll puede crecer sin tocar Go.
+ */
+export async function fetchComprobantesHasta(params = {}, maximo = MAXIMO_CONSULTA) {
+  const tope = Math.min(Math.max(Number(maximo) || MAXIMO_CONSULTA, 1), MAXIMO_CONSULTA);
+  const acumulado = [];
+  const vistos = new Set();
+
+  const agregar = (lista = []) => {
+    for (const item of lista) {
+      if (acumulado.length >= tope) return;
+      const clave = claveItem(item);
+      if (vistos.has(clave)) continue;
+      vistos.add(clave);
+      acumulado.push(item);
+    }
+  };
+
+  async function recolectar(desde, hasta, profundidad = 0) {
+    if (acumulado.length >= tope) return;
+
+    const respuesta = await consultarLista({ ...params, fechaInicio: desde || '', fechaFin: hasta || '' });
+    const partes = respuesta.truncada && desde && hasta && profundidad < 8
+      ? dividirRangoFechas(desde, hasta)
+      : null;
+
+    if (partes && acumulado.length + respuesta.lista.length < tope) {
+      await recolectar(partes[0].desde, partes[0].hasta, profundidad + 1);
+      if (acumulado.length >= tope) return;
+      await recolectar(partes[1].desde, partes[1].hasta, profundidad + 1);
+      return;
+    }
+
+    agregar(respuesta.lista);
+  }
+
+  try {
+    await recolectar(params.fechaInicio || '', params.fechaFin || '');
+    const ordenada = ordenarLista(acumulado, params.orden || 'fecha_desc');
+    return aplicarRangoHash(ordenada, params.desdeHash, params.hastaHash);
+  } catch (err) {
+    console.error('[comprobantesApiService ❌ Fetch Error]:', err.message);
+    return [];
+  }
+}
+
 /**
  * Carga los comprobantes y emula la paginación de la API v2 sobre el contrato
- * canónico. El backend devuelve como máximo 100 filas por consulta; el frontend
- * aplica rango de hashes, orden y página para conservar el scroll incremental.
+ * canónico. Se conserva para consumidores que necesitan una página puntual.
  */
 export async function fetchComprobantesPaginados(params = {}) {
   try {
-    const {
-      page = 1,
-      limit = 20,
-      socio = '',
-      rol = '',
-      fechaInicio = '',
-      fechaFin = '',
-      desdeHash = '',
-      hastaHash = '',
-      orden = 'fecha_desc',
-      hash = ''
-    } = params;
-
-    const url = new URL(API_URL, window.location.origin);
-    if (socio && socio.toUpperCase() !== 'TODOS' && socio.toUpperCase() !== 'TODOS LOS SOCIOS') {
-      url.searchParams.append('socio', socio.trim());
-    }
-    if (rol && rol.toUpperCase() !== 'TODOS') url.searchParams.append('rol', rol.trim());
-    if (fechaInicio) url.searchParams.append('fechaInicio', fechaInicio.trim());
-    if (fechaFin) url.searchParams.append('fechaFin', fechaFin.trim());
-    if (hash) url.searchParams.append('hash', hash.trim());
-
-    const res = await fetch(url.toString());
-
-    const contentType = res.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      console.warn(`[comprobantesApiService ⚠️ Warning]: La API respondió con formato no JSON (${res.status}).`);
-      return [];
-    }
-
-    if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-
-    const json = await res.json();
-    const lista = json?.comprobantes || json?.data || (Array.isArray(json) ? json : []);
-
-    const filtrada = aplicarRangoHash(Array.isArray(lista) ? lista : [], desdeHash, hastaHash);
+    const { page = 1, limit = 20, desdeHash = '', hastaHash = '', orden = 'fecha_desc' } = params;
+    const respuesta = await consultarLista(params);
+    const filtrada = aplicarRangoHash(respuesta.lista, desdeHash, hastaHash);
     const ordenada = ordenarLista(filtrada, orden);
     const inicio = Math.max(0, (Number(page) - 1) * Number(limit));
-
     return ordenada.slice(inicio, inicio + Number(limit));
   } catch (err) {
     console.error('[comprobantesApiService ❌ Fetch Error]:', err.message);

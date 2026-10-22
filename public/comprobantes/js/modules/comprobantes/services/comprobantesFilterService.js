@@ -12,6 +12,51 @@ export function limpiarFiltro(val) {
   return (str === 'TODOS' || str === 'TODOS LOS SOCIOS' || str === 'GENERAL') ? '' : val;
 }
 
+function normalizarSocio(val) {
+  return String(val || '').trim().toUpperCase();
+}
+
+/**
+ * Predicado estricto usado por el filtro "Ver Comprobantes" del Dashboard.
+ * Solo acepta coincidencia exacta con Socio 1 o Socio 2; no incluye herederos
+ * ni coincidencias parciales.
+ */
+export function coincideSocioEstricto(item = {}, socio = '') {
+  const objetivo = normalizarSocio(socio);
+  if (!objetivo || objetivo === 'TODOS' || objetivo === 'TODOS LOS SOCIOS') return true;
+
+  const s1 = normalizarSocio(item.nombre_socio_1 || item.socio_1);
+  const s2 = normalizarSocio(item.nombre_socio_2 || item.socio_2);
+  return s1 === objetivo || s2 === objetivo;
+}
+
+export function filtrarPorSocioEstricto(lista = [], socio = '') {
+  if (!Array.isArray(lista)) return [];
+  return lista.filter(item => coincideSocioEstricto(item, socio));
+}
+
+/**
+ * Ordenamiento único para la lista ya mapeada. Se aplica después de fusionar
+ * los bloques de consulta para que la fecha/monto sean globales y no por lote.
+ */
+export function ordenarComprobantes(lista = [], orden = 'fecha_desc') {
+  if (!Array.isArray(lista)) return [];
+  const criterio = String(orden || 'fecha_desc').toLowerCase();
+  const fecha = item => {
+    const raw = item.fecha_hora_comprobante || item.fecha_hora_iso || item.fecha || 0;
+    const ms = new Date(raw).getTime();
+    return isNaN(ms) ? 0 : ms;
+  };
+  const monto = item => parseFloat(item.monto ?? item.m1_socio ?? item.me1 ?? 0) || 0;
+
+  return [...lista].sort((a, b) => {
+    if (criterio === 'monto_desc') return monto(b) - monto(a);
+    if (criterio === 'monto_asc') return monto(a) - monto(b);
+    if (criterio === 'fecha_asc') return fecha(a) - fecha(b);
+    return fecha(b) - fecha(a);
+  });
+}
+
 export function filtrarComprobantesAtómico(listaBase = [], directorio = [], filtros = {}) {
   if (!Array.isArray(listaBase) || listaBase.length === 0) return [];
 
@@ -30,26 +75,11 @@ export function filtrarComprobantesAtómico(listaBase = [], directorio = [], fil
     return Boolean(s2 && s2 !== 'GENERAL' && s2 !== 'NO DEFINIDO' && s2 !== 'S/D');
   });
 
-  const socioBuscado = limpiarFiltro(filtros.filtroSocio).toUpperCase();
+  const socioBuscado = normalizarSocio(filtros.filtroSocio);
 
-  // 1. CORTAFUEGOS DE SOCIO (Socio 1 o Socio 2)
-  if (socioBuscado) {
-    const sociosValidos = new Set([socioBuscado]);
-    if (Array.isArray(directorio) && directorio.length > 0) {
-      directorio.forEach(d => {
-        const padre = String(d.padre || d.herencia || '').trim().toUpperCase();
-        const nombre = String(d.nombre || '').trim().toUpperCase();
-        if (padre === socioBuscado || nombre === socioBuscado) {
-          if (d.nombre) sociosValidos.add(String(d.nombre).trim().toUpperCase());
-        }
-      });
-    }
-
-    resultado = resultado.filter(item => {
-      const s1 = String(item.nombre_socio_1 || item.socio_1 || '').trim().toUpperCase();
-      const s2 = String(item.nombre_socio_2 || item.socio_2 || '').trim().toUpperCase();
-      return sociosValidos.has(s1) || sociosValidos.has(s2);
-    });
+  // 1. CORTAFUEGOS DE SOCIO (coincidencia exacta en Socio 1 o Socio 2)
+  if (socioBuscado && socioBuscado !== 'TODOS' && socioBuscado !== 'TODOS LOS SOCIOS') {
+    resultado = resultado.filter(item => coincideSocioEstricto(item, socioBuscado));
   }
 
   // 2. FILTRADO POR FECHA INICIO

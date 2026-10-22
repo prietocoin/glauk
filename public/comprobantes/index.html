@@ -128,13 +128,8 @@
       🔄
     </button>
 
-    <!-- Botón Generador de Estado de Cuenta PDF / Evolution API -->
-    <button @click.stop="$dispatch('abrir-reporte', { socio: filtroSocio })" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-1.5 active:scale-95">
-      📄 Reportes
-    </button>
-
     <!-- Contador de ítems en pantalla -->
-    <span class="px-2.5 py-1.5 bg-purple-950/80 border border-purple-500/40 text-purple-300 rounded-xl text-[11px] md:text-xs font-bold font-mono" x-text="(items || []).length + ' ítems'"></span>
+    <span class="px-2.5 py-1.5 bg-purple-950/80 border border-purple-500/40 text-purple-300 rounded-xl text-[11px] md:text-xs font-bold font-mono" x-text="(items || []).length + ' / ' + (todosLosItems || []).length + ' ítems'"></span>
   </div>
 </div>
 
@@ -150,7 +145,7 @@
   <!-- 2. Ítems Operados -->
   <div class="bg-[#060c24] p-2.5 md:p-3.5 rounded-xl md:rounded-2xl border border-blue-900/50 shadow-xl">
     <p class="text-[8px] md:text-[9px] font-extrabold text-blue-400/80 uppercase">OPERADOS</p>
-    <h3 class="text-xs md:text-base font-black text-pink-400 mt-0.5" x-text="(items || []).length + ' ítems'"></h3>
+    <h3 class="text-xs md:text-base font-black text-pink-400 mt-0.5" x-text="(todosLosItems || []).length + ' ítems'"></h3>
   </div>
 
   <!-- 3. Saldo Anterior editable -->
@@ -537,7 +532,7 @@
 
   <!-- FIN DE REGISTROS O CAP DE 200 ALCANZADO -->
   <div x-show="!cargando && !hayMasDatos && items.length > 0" class="text-center py-2.5 px-5 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-400 text-xs font-mono shadow-lg">
-    <span x-text="items.length >= capMaximoDOM ? '⚡ Límite máximo de 200 tarjetas alcanzado en pantalla' : '✅ Todos los comprobantes del mes están cargados'"></span>
+    <span x-text="items.length >= capMaximoDOM ? ('⚡ Límite máximo de ' + capMaximoDOM + ' tarjetas alcanzado en pantalla') : '✅ Todos los comprobantes del mes están cargados'"></span>
     <span class="block text-[10px] text-slate-500 mt-0.5" x-text="'Total en pantalla: ' + items.length + ' de ' + todosLosItems.length"></span>
   </div>
 
@@ -625,11 +620,16 @@
 <!-- ================================================================= -->
 
 <div class="bg-[#0b132b] border border-slate-800 rounded-lg p-4 space-y-4">
-  <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+  <div class="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
     <h2 class="text-base font-semibold text-white flex items-center gap-2">
       <span>📊 Balance y Pendientes</span>
     </h2>
-    <span class="text-xs text-cyan-400 font-mono" x-text="`Lote Activo: ${loteActivo || 'N/A'}`"></span>
+    <div class="flex items-center gap-2">
+      <button @click.stop="$dispatch('abrir-reporte', { socio: filtroSocio })" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-1.5 active:scale-95">
+        📄 Reportes
+      </button>
+      <span class="text-xs text-cyan-400 font-mono" x-text="`Lote Activo: ${loteActivo || 'N/A'}`"></span>
+    </div>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -675,7 +675,7 @@
             <td class="p-2 text-white font-medium" x-text="item.nombre"></td>
             <td class="p-2 text-cyan-400 font-mono font-bold" x-text="formatMonto(item.saldoFinal) + ' ' + item.moneda"></td>
             <td class="p-2">
-              <button @click="filtroSocio = item.nombre; vistaActiva = 'comprobantes'" class="px-2 py-1 bg-cyan-500/20 text-cyan-300 rounded hover:bg-cyan-500/30 active:scale-95 transition-all">
+              <button @click="verComprobantesDeSocio(item.nombre)" class="px-2 py-1 bg-cyan-500/20 text-cyan-300 rounded hover:bg-cyan-500/30 active:scale-95 transition-all">
                 Ver Comprobantes
               </button>
             </td>
@@ -1104,9 +1104,9 @@
 <!-- RESPONSABILIDAD: Modal visor y despacho de estados de cuenta      -->
 <!-- ================================================================= -->
 
-<div x-data="{ modalReporteAbierto: false, generandoImagen: false, paginaActual: 1, filtroSocio: '' }"
+<div x-data="{ modalReporteAbierto: false, generandoImagen: false, paginaActual: 1, filtroSocio: '', anchoReporte: 1080 }"
      x-show="modalReporteAbierto"
-     @abrir-reporte.window="modalReporteAbierto = true; paginaActual = 1; if ($event.detail?.socio) filtroSocio = $event.detail.socio;"
+     @abrir-reporte.window="modalReporteAbierto = true; paginaActual = 1; anchoReporte = 1080; if ($event.detail?.socio) filtroSocio = $event.detail.socio;"
      class="fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-3 md:p-6 bg-black/85 backdrop-blur-md"
      x-cloak>
   <div class="bg-[#060c24] border border-blue-900/80 rounded-2xl w-full max-w-4xl flex flex-col shadow-2xl relative overflow-hidden" @click.away="modalReporteAbierto = false">
@@ -1115,7 +1115,12 @@
     <div class="flex items-center justify-between bg-[#080e26] border-b border-blue-900/60 px-3 py-2.5 shrink-0">
       <span class="font-black text-cyan-300 text-xs sm:text-sm">📄 Estado de Cuenta</span>
       <div class="flex items-center gap-1.5">
-        <button type="button" @click="generandoImagen = true; enviarReporteViaEvolution(filtroSocio).finally(() => generandoImagen = false)" :disabled="generandoImagen" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black shadow-lg active:scale-95 transition-all">
+        <label class="text-[9px] font-bold text-slate-400 uppercase" for="ancho-reporte">Ancho</label>
+        <select id="ancho-reporte" x-model.number="anchoReporte" class="bg-[#030611] border border-blue-900/60 rounded-lg px-1.5 py-1 text-[10px] text-slate-200 outline-none">
+          <option :value="1080">1080 px</option>
+          <option :value="800">800 px</option>
+        </select>
+        <button type="button" @click="generandoImagen = true; enviarReporteViaEvolution(filtroSocio, anchoReporte).finally(() => generandoImagen = false)" :disabled="generandoImagen" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black shadow-lg active:scale-95 transition-all">
           <span x-show="!generandoImagen" x-text="'🤖 Enviar Pág ' + paginaActual"></span>
           <span x-show="generandoImagen">⏳ Enviando...</span>
         </button>
@@ -1124,8 +1129,8 @@
     </div>
 
     <!-- DOCUMENTO RENDERIZADO PARA CAPTURA DE IMAGEN -->
-    <div class="flex-1 overflow-y-auto p-4 flex justify-center bg-[#030611]">
-      <div id="reporte-html-documento" class="bg-white text-slate-900 p-6 rounded-xl shadow-2xl w-[800px] min-h-[1000px] flex flex-col justify-between">
+    <div class="flex-1 overflow-auto p-4 flex justify-center bg-[#030611]">
+      <div id="reporte-html-documento" class="bg-white text-slate-900 p-6 rounded-xl shadow-2xl flex flex-col justify-between shrink-0" :style="'width:' + anchoReporte + 'px; max-width:' + anchoReporte + 'px'">
         <div>
           <div class="border-b-2 border-slate-900 pb-3 mb-4 flex justify-between items-center">
             <h1 class="text-lg font-black uppercase text-slate-900">REPORTE DE ESTADO DE CUENTA</h1>

@@ -9,13 +9,13 @@ export const comprobantesGetters = {
       list = list.filter(i => (i.rol || i.rol_socio_1 || '').toUpperCase() === r);
     }
 
-    // 2. Filtro por Socio / Entidad (Socio 1 o Socio 2)
+    // 2. Filtro por Socio / Entidad (coincidencia exacta en Socio 1 o Socio 2)
     if (this.filtroSocio && this.filtroSocio !== 'TODOS' && this.filtroSocio !== '') {
-      const s = this.filtroSocio.toLowerCase();
+      const s = String(this.filtroSocio).trim().toUpperCase();
       list = list.filter(i => {
-        const s1 = (i.nombre_socio_1 || i.socio_1 || i.socio || '').toLowerCase();
-        const s2 = (i.nombre_socio_2 || i.socio_2 || '').toLowerCase();
-        return s1.includes(s) || s2.includes(s);
+        const s1 = String(i.nombre_socio_1 || i.socio_1 || i.socio || '').trim().toUpperCase();
+        const s2 = String(i.nombre_socio_2 || i.socio_2 || '').trim().toUpperCase();
+        return s1 === s || s2 === s;
       });
     }
 

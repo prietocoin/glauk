@@ -13,9 +13,11 @@ import {
   calcularMovimientoFiltradoTotal
 } from '../services/saldosCalculatorService.js';
 
-import { fetchComprobantesPaginados, eliminarComprobantePorHash } from '../services/comprobantesApiService.js';
+import { fetchComprobantesHasta, eliminarComprobantePorHash } from '../services/comprobantesApiService.js';
+import { filtrarPorSocioEstricto, ordenarComprobantes } from '../services/comprobantesFilterService.js';
 import { crearAccionesModal } from '../services/comprobantesModalActions.js';
 import { prepararEdicionComprobante, obtenerInsigniaRol } from '../services/comprobantesMapperService.js';
+import { capturarReporteEstadoCuenta } from '../services/comprobantesReporteService.js';
 import { obtenerSaldoAnteriorSocio, obtenerSujetoAuditado } from '../services/comprobantesSaldosService.js';
 
 function obtenerRangoMesActualCaracas() {
@@ -36,16 +38,15 @@ export function comprobantesState() {
   const { fechaInicio: inicioMes, fechaFin: finMes } = obtenerRangoMesActualCaracas();
 
   const state = {
-    paginaAPI: 1,
-    limitAPI: 50,
     todosLosItems: [],
     items: [],
     directorio: [],
     cargando: false,
     hayMasDatos: true,
+    solicitudActual: 0,
 
     tamanoLote: 20,
-    capMaximoDOM: 300,
+    capMaximoDOM: 500,
 
     modalAbierto: false,
     itemEdicion: null,
@@ -65,11 +66,11 @@ export function comprobantesState() {
     obtenerInsigniaRol,
 
     get comprobantes() {
-      return this.items;
+      return this.todosLosItems;
     },
 
     get movimientoFiltradoTotal() {
-      return calcularMovimientoFiltradoTotal(this.items, this.filtroSocio);
+      return calcularMovimientoFiltradoTotal(this.todosLosItems, this.filtroSocio);
     },
 
     get saldoActualTotal() {
@@ -77,7 +78,7 @@ export function comprobantesState() {
     },
 
     get sociosPendientesConsolidado() {
-      return calcularSociosPendientesConsolidado(this.directorio, this.items, {
+      return calcularSociosPendientesConsolidado(this.directorio, this.todosLosItems, {
         fechaInicio: this.filtroFechaInicio, fechaFin: this.filtroFechaFin
       });
     },
@@ -120,87 +121,76 @@ export function comprobantesState() {
     },
 
     actualizarSocioSeleccionado() {
+      this.filtroSocio = String(this.filtroSocio || '').trim();
       this.saldoAnterior = obtenerSaldoAnteriorSocio(this.directorio, this.filtroSocio);
-      this.resetearYRefrescar();
+      return this.resetearYRefrescar();
     },
 
-    async cargarComprobantes(silencioso = false) {
+    async verComprobantesDeSocio(nombre = '') {
+      this.filtroSocio = String(nombre || '').trim();
+      this.saldoAnterior = obtenerSaldoAnteriorSocio(this.directorio, this.filtroSocio);
+      this.vistaActiva = 'comprobantes';
+      return this.resetearYRefrescar();
+    },
+
+    async cargarComprobantes() {
       return this.resetearYRefrescar();
     },
 
     async resetearYRefrescar() {
+      const token = ++this.solicitudActual;
       this.items = [];
       this.todosLosItems = [];
-      this.paginaAPI = 1;
-      this.hayMasDatos = true;
-      this.cargando = false;
-      return this.cargarSiguientePagina();
-    },
-
-    async cargarSiguientePagina() {
-      if (this.cargando || !this.hayMasDatos) return;
+      this.hayMasDatos = false;
       this.cargando = true;
 
       try {
-        if (this.items.length + this.tamanoLote > this.todosLosItems.length) {
-          const params = {
-            page: this.paginaAPI,
-            limit: this.limitAPI,
-            socio: this.filtroSocio,
-            rol: this.filtroRol,
-            fechaInicio: this.filtroFechaInicio,
-            fechaFin: this.filtroFechaFin,
-            desdeHash: this.filtroDesdeHash,
-            hastaHash: this.filtroHastaHash,
-            orden: this.filtroOrden,
-            hash: this.filtroHash
-          };
+        const params = {
+          socio: this.filtroSocio,
+          rol: this.filtroRol,
+          fechaInicio: this.filtroFechaInicio,
+          fechaFin: this.filtroFechaFin,
+          desdeHash: this.filtroDesdeHash,
+          hastaHash: this.filtroHastaHash,
+          orden: this.filtroOrden,
+          hash: this.filtroHash
+        };
 
-          const raw = await fetchComprobantesPaginados(params);
-          const lista = Array.isArray(raw) ? raw : (raw?.datos || raw?.comprobantes || raw?.data || []);
+        const raw = await fetchComprobantesHasta(params, this.capMaximoDOM);
+        if (token !== this.solicitudActual) return;
 
-          if (lista.length === 0) {
-            this.hayMasDatos = false;
-          } else {
-            const mapeados = lista.map(item => prepararEdicionComprobante(item, this.loteActivo));
+        const lista = Array.isArray(raw) ? raw : [];
+        const mapeados = lista.map(item => prepararEdicionComprobante(item, this.loteActivo));
+        const estrictos = filtrarPorSocioEstricto(mapeados, this.filtroSocio);
+        const ordenados = ordenarComprobantes(estrictos, this.filtroOrden);
 
-            const idsExistentes = new Set(this.todosLosItems.map(i => String(i.id || i.hash_largo)));
-            const nuevosUnicos = mapeados.filter(i => !idsExistentes.has(String(i.id || i.hash_largo)));
-
-            this.todosLosItems = [...this.todosLosItems, ...nuevosUnicos];
-            this.paginaAPI++;
-
-            if (lista.length < this.limitAPI) {
-              this.hayMasDatos = false;
-            }
-          }
-        }
-
-        const proximoLimite = Math.min(
-          this.items.length + this.tamanoLote,
-          this.capMaximoDOM,
-          this.todosLosItems.length
-        );
-
-        this.items = [...this.todosLosItems.slice(0, proximoLimite)];
-
-        if (this.items.length >= this.capMaximoDOM) {
-          this.hayMasDatos = false;
-        }
-
+        this.todosLosItems = ordenados.slice(0, this.capMaximoDOM);
+        this.items = this.todosLosItems.slice(0, this.tamanoLote);
+        this.hayMasDatos = this.items.length < this.todosLosItems.length;
       } catch (err) {
         console.error('❌ Error al cargar lote de comprobantes:', err);
       } finally {
-        setTimeout(() => {
-          this.cargando = false;
-        }, 100);
+        if (token === this.solicitudActual) this.cargando = false;
       }
+    },
+
+    cargarSiguientePagina() {
+      if (this.cargando || !this.hayMasDatos) return;
+
+      const proximoLimite = Math.min(
+        this.items.length + this.tamanoLote,
+        this.capMaximoDOM,
+        this.todosLosItems.length
+      );
+
+      this.items = this.todosLosItems.slice(0, proximoLimite);
+      this.hayMasDatos = this.items.length < this.todosLosItems.length;
     },
 
     iniciarEscuchadoresScroll() {
       this.$nextTick(() => {
         const intentarCargar = () => {
-          if (this.cargando || !this.hayMasDatos) return;
+          if (this.vistaActiva !== 'comprobantes' || this.cargando || !this.hayMasDatos) return;
 
           const sentinel = document.getElementById('sentinel-scroll');
           if (!sentinel) return;
@@ -218,8 +208,6 @@ export function comprobantesState() {
         document.addEventListener('wheel', intentarCargar, { capture: true, passive: true });
         document.addEventListener('touchmove', intentarCargar, { capture: true, passive: true });
 
-        setInterval(intentarCargar, 250);
-
         const sentinel = document.getElementById('sentinel-scroll');
         if (sentinel) {
           const observer = new IntersectionObserver((entries) => {
@@ -233,25 +221,15 @@ export function comprobantesState() {
       });
     },
 
-    async enviarReporteViaEvolution(socio = '') {
+    async enviarReporteViaEvolution(socio = '', ancho = 1080) {
       const documento = document.getElementById('reporte-html-documento');
       if (!documento) {
         alert('No se encontró el documento del reporte.');
         return;
       }
-      if (typeof html2canvas !== 'function') {
-        alert('El generador de imágenes no está disponible.');
-        return;
-      }
 
       try {
-        const canvas = await html2canvas(documento, {
-          backgroundColor: '#ffffff',
-          scale: 2,
-          useCORS: true,
-          logging: false
-        });
-        const base64 = canvas.toDataURL('image/jpeg', 0.92);
+        const base64 = await capturarReporteEstadoCuenta(documento, { ancho });
         const response = await fetch('/api/v1/reportes/imagen', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -291,6 +269,7 @@ export function comprobantesState() {
       } finally {
         this.items = this.items.filter(item => String(item.id || item.hash_largo || '') !== idStr);
         this.todosLosItems = this.todosLosItems.filter(item => String(item.id || item.hash_largo || '') !== idStr);
+        this.hayMasDatos = this.items.length < this.todosLosItems.length;
       }
     },
 
