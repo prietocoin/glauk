@@ -1,25 +1,7 @@
 /**
- * @file calculoTasaEnVivo.js
- * @description Utilidades puras para cálculo en tiempo real de tasas y etiquetado de talla en glauk2.
+ * @file tallaSocio.js
+ * @description Clasificación de tallas (S, M, L) según las monedas activas del socio.
  */
-
-/**
- * Calcula el precio comercial en vivo según tasa base, porcentaje y tipo de operación.
- * @param {number|string} tasaBase - Precio base de la divisa.
- * @param {number|string} porcentaje - Margen comercial en %.
- * @param {boolean} esResta - Si descuenta (pago) o suma (depósito).
- * @returns {string} Tasa formateada.
- */
-export function calcularTasaEnVivo(tasaBase, porcentaje, esResta = false) {
-  const base = parseFloat(tasaBase) || 1.0;
-  const p = parseFloat(porcentaje) || 0;
-  const factor = esResta ? (1 - (p / 100)) : (1 + (p / 100));
-  const res = base * factor;
-
-  if (res === 0) return '0';
-  if (res > 99.99) return Math.trunc(res).toLocaleString('en-US');
-  return (Math.trunc(res * 100) / 100).toFixed(2);
-}
 
 /**
  * Determina la categoría de talla (S, M, L) según las monedas activas del socio.

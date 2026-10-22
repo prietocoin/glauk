@@ -50,7 +50,7 @@
 <!-- RESPONSABILIDAD: Menú lateral de navegación global y Modales      -->
 <!-- ================================================================= -->
 
-<aside class="w-full md:w-64 bg-[#070e23] border-r border-slate-800 flex flex-col justify-between shrink-0" x-data="{ modalTasas: false, modalPerfiles: false }">
+<aside class="w-full md:w-64 bg-[#070e23] border-r border-slate-800 flex flex-col justify-between shrink-0" x-data="{ modalPerfiles: false }">
   <div class="p-4 space-y-6">
     <!-- LOGO -->
     <div class="flex items-center gap-3">
@@ -70,14 +70,14 @@
         Comprobantes
       </button>
 
-      <!-- 2. CARTELERA TASAS (Modal Iframe TasasHub) -->
-      <button @click="vistaActiva = 'cartelera'" :class="vistaActiva === 'cartelera' ? 'bg-cyan-500/10 text-cyan-400 border-l-2 border-cyan-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'" class="w-full flex items-center justify-between px-3 py-2.5 rounded-r text-sm font-medium transition">
-        <div class="flex items-center gap-3">
+      <!-- 2. CARTELERA TASAS (módulo TasasHub real) -->
+      <a href="/tasas/" class="w-full flex items-center justify-between px-3 py-2.5 rounded-r text-sm font-medium text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 transition no-underline" aria-label="Abrir el módulo TasasHub">
+        <span class="flex items-center gap-3">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
           Cartelera Tasas
-        </div>
-        <span class="text-xs text-sky-400 opacity-80 font-normal">↗</span>
-      </button>
+        </span>
+        <span class="text-xs text-sky-400 opacity-80 font-normal" aria-hidden="true">&#8599;</span>
+      </a>
 
       <!-- 3. DIRECTORIO SOCIOS (Modal Iframe PerfilHub) -->
       <button @click="vistaActiva = 'directorio'" :class="vistaActiva === 'directorio' ? 'bg-cyan-500/10 text-cyan-400 border-l-2 border-cyan-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'" class="w-full flex items-center justify-between px-3 py-2.5 rounded-r text-sm font-medium transition">
@@ -102,51 +102,6 @@
       Glauk2 Engine &bull; Online
     </div>
   </div>
-
-  <!-- MODAL IFRAME: TasasHub Engine -->
-  <template x-teleport="body">
-    <div
-      @keydown.escape.window="modalTasas = false"
-      x-show="modalTasas"
-      x-cloak
-      class="fixed inset-0 z-[100] flex items-center justify-center bg-[#070b14]/90 backdrop-blur-md p-4">
-
-      <div
-        @click.outside="modalTasas = false"
-        class="relative w-full h-[95vh] max-w-[1400px] bg-[#0b1329] border border-cyan-500/40 rounded-xl shadow-2xl flex flex-col overflow-hidden ring-1 ring-cyan-500/10">
-
-        <div class="flex items-center justify-between px-5 py-3 border-b border-cyan-500/20 bg-slate-900/95 shadow-sm">
-          <div class="flex items-center gap-2">
-            <span class="text-amber-400 drop-shadow-md">⚡</span>
-            <span class="text-sm font-bold text-slate-100 tracking-wide">TasasHub Engine</span>
-            <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 ml-2">LIVE</span>
-          </div>
-          <div class="flex items-center gap-4">
-            <a href="https://tasas.jairokov.com" target="_blank" class="text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1">
-              Abrir en pestaña ↗
-            </a>
-            <button @click="modalTasas = false" class="text-slate-400 hover:text-white px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 hover:shadow-lg text-xs font-bold transition-all border border-slate-700/50">
-              ✕ ESC
-            </button>
-          </div>
-        </div>
-
-        <div class="flex-1 w-full h-full bg-[#050811] relative">
-          <div class="absolute inset-0 flex items-center justify-center pointer-events-none" x-show="modalTasas">
-            <div class="animate-pulse text-cyan-500/50 text-sm font-semibold tracking-widest">Iniciando TasasHub...</div>
-          </div>
-
-          <template x-if="modalTasas">
-            <iframe
-              src="https://tasas.jairokov.com?embed=true"
-              class="absolute inset-0 w-full h-full border-0 z-10 rounded-b-xl"
-              loading="lazy">
-            </iframe>
-          </template>
-        </div>
-      </div>
-    </div>
-  </template>
 
   <!-- MODAL IFRAME: PerfilHub Engine (Directorio Socios) -->
   <template x-teleport="body">
@@ -633,77 +588,6 @@
 
 </div>
 
-
-      </div>
-
-      <!-- VISTA 2: CARTELERA DE TASAS -->
-      <div x-show="vistaActiva === 'cartelera'" class="space-y-4">
-        <!-- ================================================================= -->
-<!-- COMPONENTE: gestionTasas.ejs                                      -->
-<!-- UBICACIÓN: views/tasas/components/                              -->
-<!-- RESPONSABILIDAD: Monitor de variación, borradores y publicación    -->
-<!-- ================================================================= -->
-
-<div class="space-y-4">
-  <!-- CABECERA Y ACCIONES DE PUBLICACIÓN -->
-  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-    <h2 class="text-xl md:text-2xl font-black text-white tracking-tight">Gestión Unificada de Tasas</h2>
-
-    <div class="flex items-center gap-2.5 flex-wrap w-full sm:w-auto">
-      <div class="flex items-center gap-2 bg-[#060c24] px-3 py-1.5 rounded-xl border border-cyan-500/40 shadow-md">
-        <span class="text-xs font-bold text-cyan-300">🧪 Modo Prueba:</span>
-        <label class="relative inline-flex items-center cursor-pointer">
-          <input type="checkbox" x-model="modoPruebaActivo" class="sr-only peer">
-          <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
-        </label>
-      </div>
-
-      <button @click="reenviarTasaActual()" class="flex-1 sm:flex-none px-3 py-2 bg-amber-950/80 border border-amber-500/50 text-amber-300 rounded-xl text-xs font-bold hover:bg-amber-900 transition-all flex items-center justify-center gap-1 active:scale-95">⚡ Reenviar Tasa</button>
-      <button @click="conectarHooAPI()" class="flex-1 sm:flex-none px-3 py-2 bg-purple-950/80 border border-purple-500/50 text-purple-300 rounded-xl text-xs font-bold hover:bg-purple-900 transition-all flex items-center justify-center gap-1 active:scale-95">🔄 Traer Borrador Hoo</button>
-    </div>
-  </div>
-
-  <!-- PANEL MONITOR Y TARJETAS DE MONEDAS -->
-  <div class="bg-[#060c24] rounded-2xl border border-blue-900/60 p-3 md:p-4 space-y-4 shadow-2xl">
-    <div class="flex justify-between items-center border-b border-blue-900/50 pb-2">
-      <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        <h3 class="text-[10px] md:text-xs font-black text-emerald-400 uppercase tracking-wider">Monitor de Variación & Publicación</h3>
-      </div>
-      <div class="flex items-center gap-2">
-        <span x-show="modoPruebaActivo" class="px-2 py-0.5 bg-cyan-950/90 border border-cyan-400/80 text-cyan-300 text-[10px] font-bold rounded-lg font-mono animate-pulse">🧪 DESTINO: GRUPO PRUEBA</span>
-        <span class="px-2 py-0.5 bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-[10px] md:text-[11px] font-mono font-bold rounded-lg" x-text="'Lote en Prod: ' + (loteActivo || 'CARGANDO...')"></span>
-      </div>
-    </div>
-
-    <!-- GRILLA REACTIVA DE DIVISAS -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-      <template x-for="moneda in Object.keys(tasasProduccion).filter(m => !['ID', 'CREATED_AT', 'SUCCESS', 'MESSAGE'].includes(m.toUpperCase())).sort((a, b) => (['USD', 'USDT', 'PYUSD', 'ECU', 'PAN'].includes(b.toUpperCase()) ? 1 : 0) - (['USD', 'USDT', 'PYUSD', 'ECU', 'PAN'].includes(a.toUpperCase()) ? 1 : 0))" :key="'card-'+moneda">
-        <div class="bg-[#030611] p-3 rounded-xl border transition-all relative overflow-hidden" :class="(borradorCapturado && borradorCapturado[moneda] !== undefined && parseFloat(borradorCapturado[moneda]) !== parseFloat(tasasProduccion[moneda])) ? 'border-amber-500/60 shadow-[0_0_10px_rgba(245,158,11,0.15)]' : 'border-blue-900/50'">
-          <div class="flex justify-between items-center mb-2">
-            <span class="text-sm font-black text-purple-400 uppercase font-mono" x-text="moneda"></span>
-            <span x-show="borradorCapturado && borradorCapturado[moneda] !== undefined && parseFloat(borradorCapturado[moneda]) !== parseFloat(tasasProduccion[moneda])" class="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse" title="Cambio detectado"></span>
-          </div>
-          <div class="space-y-2.5">
-            <div class="flex items-center justify-between text-[10px] bg-[#060c24] px-1.5 py-1 rounded border border-blue-900/40">
-              <span class="text-slate-500 font-bold uppercase">PROD:</span>
-              <span class="font-mono font-bold text-slate-300" x-text="formatMonto(tasasProduccion[moneda])"></span>
-            </div>
-            <div class="relative">
-              <span class="absolute -top-2 left-2 bg-[#030611] px-1 text-[8px] font-bold text-emerald-400 uppercase">NUEVO LOTE</span>
-              <input type="number" step="any" :value="(borradorCapturado && borradorCapturado[moneda] !== undefined) ? borradorCapturado[moneda] : tasasProduccion[moneda]" @input="if (!borradorCapturado) borradorCapturado = {}; borradorCapturado[moneda] = $event.target.value" class="w-full bg-[#080e26] border rounded-lg px-2 py-1.5 text-sm font-black font-mono outline-none focus:border-cyan-400 transition-colors" :class="(borradorCapturado && borradorCapturado[moneda] !== undefined && parseFloat(borradorCapturado[moneda]) !== parseFloat(tasasProduccion[moneda])) ? 'text-amber-400 border-amber-900/60' : 'text-emerald-400 border-emerald-900/60'">
-            </div>
-          </div>
-        </div>
-      </template>
-    </div>
-
-    <!-- BOTÓN DE GUARDADO Y DESPACHO -->
-    <div class="flex justify-end pt-3 border-t border-blue-900/50">
-      <button @click="publicarTasaOficial()" class="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs md:text-sm rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 active:scale-95">🚀 Guardar en tasas_mercado & Publicar</button>
-    </div>
-  </div>
-</div>
 
       </div>
 
