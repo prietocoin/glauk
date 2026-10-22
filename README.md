@@ -883,7 +883,7 @@ El frontend de construcción de reportes y la superficie HTTP del dominio se com
 
 ## 10. Frontends y routing estático
 
-> `internal/platform/httpx` resuelve host/prefijo, sirve assets con caché diferenciada y aplica el SPA fallback. La entrada principal es la UI **Glauk2 Engine** importada de `glauk2`, servida desde `public/comprobantes/`; agrupa Comprobantes, Cartelera de Tasas, Directorio y Dashboard en una sola shell Alpine.js. Los shells de `tasas`, `perfiles` y `reportes` se conservan como compatibilidad de tenant.
+> `internal/platform/httpx` resuelve host/prefijo, sirve assets con caché diferenciada y aplica el SPA fallback. La entrada principal es la UI **Glauk2 Engine** importada de `glauk2`, servida desde `public/comprobantes/`; agrupa Comprobantes, Cartelera de Tasas, Directorio y Dashboard en una sola shell Alpine.js. La shell **TasasHub Engine** de `public/tasas/` es la migración 1:1 del panel tasasgo: monitor global, checklist de socios, borrador HOO, remesas, cartelera y PWA, dividida en módulos ES con CSS local y sin CDN. Los shells de `perfiles` y `reportes` se conservan como compatibilidad de tenant.
 
 ### 10.1 Tabla de tenants
 
@@ -972,7 +972,7 @@ public/
 │   ├── manifest.json           PWA de Glauk2
 │   ├── sw.js                   service worker pass-through
 │   └── logo-fundablock.png     icono PWA
-├── tasas/                      shell de compatibilidad
+├── tasas/                      TasasHub Engine (monitor, checklist, HOO, PWA; módulos ES y CSS local)
 ├── perfiles/                   shell de compatibilidad
 └── reportes/                   shell de compatibilidad
 ```
@@ -998,7 +998,7 @@ const script = new URL('../sw.js', import.meta.url);
 navigator.serviceWorker.register(script);
 ```
 
-El scope efectivo es `/comprobantes/`; en modo host la página `/` sigue funcionando, pero el worker controla solo ese prefijo. `public/comprobantes/sw.js` hace `skipWaiting`, `clients.claim` y un `fetch` pass-through deliberado: no cachea el shell ni las respuestas de `/api/`. Los datos contables, las mutaciones y los envíos de reportes siempre van a la red. Los shells de compatibilidad conservan su propio `sw.js`.
+El scope efectivo es `/comprobantes/`; en modo host la página `/` sigue funcionando, pero el worker controla solo ese prefijo. `public/comprobantes/sw.js` hace `skipWaiting`, `clients.claim` y un `fetch` pass-through deliberado: no cachea el shell ni las respuestas de `/api/`. Los datos contables, las mutaciones y los envíos de reportes siempre van a la red. `perfiles` y `reportes` conservan su propio `sw.js`; TasasHub registra el suyo con el mismo comportamiento pass-through.
 
 ### 10.9 Pipeline de canvas
 

@@ -1,26 +1,70 @@
-import { get, post, put, del, request } from '../../shared/js/http.js';
-
 const BASE = '/api/v1/tasas';
 
-export const monitor = () => get(`${BASE}/monitor`);
-export const socios = () => get(`${BASE}/socios`).then((data) => data.socios || []);
-export const historial = () => get('/api/v1/comprobantes/tasas/historial');
-export const hoo = () => get(`${BASE}/hoo-borrador`).then((data) => data.borrador || {});
-
-export const guardarLote = (tasas) => post(`${BASE}/guardar-lote`, { tasas });
-export const publicarLote = (modoPrueba) => post(`${BASE}/publicar-lote`, { modo_prueba_global: !!modoPrueba });
-export const notificarRemesas = () => post(`${BASE}/notificar-remesas`, {});
-export const eliminarLote = (id) => del(`${BASE}/lote/${encodeURIComponent(id)}`);
-
-export const guardarSocio = (nombre, cambios) =>
-  put(`${BASE}/socios/${encodeURIComponent(nombre)}`, cambios);
-export const disparar = (socio, modoPrueba) =>
-  post(`${BASE}/disparar`, { socio, modo_prueba: !!modoPrueba });
-
-export const renderCartelera = (socio) =>
-  request(`${BASE}/render/${encodeURIComponent(socio)}`, { responseType: 'blob', timeout: 30000 });
+async function solicitarJson(ruta, opciones = {}) {
+  const init = { ...opciones };
+  if (init.body && !init.headers) {
+    init.headers = { 'Content-Type': 'application/json' };
+  }
+  const respuesta = await fetch(`${BASE}${ruta}`, init);
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok || datos.success === false) {
+    throw new Error(datos.error || `Error HTTP ${respuesta.status}`);
+  }
+  return datos;
+}
 
 export const api = {
-  monitor, socios, historial, hoo, guardarLote, publicarLote,
-  notificarRemesas, eliminarLote, guardarSocio, disparar, renderCartelera
+  monitor() {
+    return solicitarJson('/monitor');
+  },
+
+  socios() {
+    return solicitarJson('/socios');
+  },
+
+  borradorHoo() {
+    return solicitarJson('/hoo-borrador');
+  },
+
+  guardarLote(tasas) {
+    return solicitarJson('/guardar-lote', {
+      method: 'POST',
+      body: JSON.stringify({ tasas })
+    });
+  },
+
+  publicarLote(modoPruebaGlobal) {
+    return solicitarJson('/publicar-lote', {
+      method: 'POST',
+      body: JSON.stringify({ modo_prueba_global: modoPruebaGlobal })
+    });
+  },
+
+  notificarRemesas() {
+    return solicitarJson('/notificar-remesas', { method: 'POST' });
+  },
+
+  eliminarLote(idTasa) {
+    return solicitarJson(`/lote/${encodeURIComponent(idTasa)}`, { method: 'DELETE' });
+  },
+
+  guardarSocio(nombre, cambios) {
+    return solicitarJson(`/socios/${encodeURIComponent(nombre)}`, {
+      method: 'PUT',
+      body: JSON.stringify(cambios)
+    });
+  },
+
+  disparar(socio, modoPrueba) {
+    return solicitarJson('/disparar', {
+      method: 'POST',
+      body: JSON.stringify({ socio, modo_prueba: modoPrueba })
+    });
+  },
+
+  async renderBlob(nombre) {
+    const respuesta = await fetch(`${BASE}/render/${encodeURIComponent(nombre)}`);
+    if (!respuesta.ok) throw new Error('Error al renderizar');
+    return respuesta.blob();
+  }
 };

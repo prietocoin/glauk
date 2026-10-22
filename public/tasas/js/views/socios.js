@@ -1,118 +1,117 @@
-import { qs, qsa, clear, el, escapeHTML } from '../../../shared/js/dom.js';
-import { formatPercent, toNumber } from '../../../shared/js/format.js';
-import { abrirCartelera } from '../components/cartelera.js';
+import { qs } from '../../../shared/js/dom.js';
+import { api } from '../api.js';
+import { MONEDAS_CHECKLIST } from '../config.js';
+import { state } from '../state.js';
+import { abrirModal, cerrarModal } from '../ui/modal.js';
+import { showToast } from '../ui/toast.js';
+import { renderChecklistGrid } from '../components/checklist-grid.js';
+import { renderPartnerList } from '../components/partner-list.js';
 
-const MONEDAS = [
-  'ARS', 'BOB', 'BRL', 'CAD', 'CLP', 'COP', 'CRC', 'DOP', 'EUR',
-  'MXN', 'PAN', 'PEN', 'PYG', 'VES', 'USD', 'USDT', 'PYUSD', 'ECU'
-];
+export function initSocios() {
+  const etiquetaSocio = qs('#lblSelectedPartner');
+  const etiquetaBase = qs('#lblPartnerBase');
+  const botonPerfil = qs('#btnTogglePerfil');
+  const banner = qs('#bannerSocioOff');
+  const grid = qs('#checklistGrid');
+  const listaSocios = qs('#partnerListContainer');
+  const buscador = qs('#txtSearchPartner');
 
-export function crearVistaSocios(ctx) {
-  let mounted = false;
-
-  function setSocios(socios) {
-    ctx.state.socios = socios || [];
-    const select = qs('#socio-select');
-    if (!select) return;
-    clear(select);
-    select.append(el('option', { value: '' }, 'Seleccione un socio…'));
-    for (const socio of ctx.state.socios) {
-      select.append(el('option', { value: socio.nombre }, socio.nombre));
-    }
-    if (!ctx.state.selected && ctx.state.socios[0]) select.value = ctx.state.socios[0].nombre;
-    if (select.value) seleccionar(select.value);
+  function actualizarPerfilUI(activo) {
+    botonPerfil.textContent = activo ? 'ON' : 'OFF';
+    botonPerfil.classList.toggle('on', activo);
+    botonPerfil.classList.toggle('off', !activo);
+    banner.classList.toggle('hidden', activo);
+    grid.classList.toggle('is-disabled', !activo);
   }
 
-  function seleccionar(nombre) {
-    const socio = ctx.state.socios.find((item) => item.nombre === nombre) || null;
-    ctx.state.selected = socio;
-    render();
+  function renderChecklist() {
+    if (!state.socioActivo) return;
+    renderChecklistGrid(grid, state.socioActivo, alternarPais);
   }
 
-  function render() {
-    const host = qs('#socio-detalle');
-    const estado = qs('#socio-estado');
-    if (!host) return;
-    const socio = ctx.state.selected;
-    if (!socio) {
-      host.innerHTML = '<div class="empty">Seleccione un socio para editar sus monedas.</div>';
-      if (estado) estado.textContent = 'Sin socio seleccionado.';
-      return;
-    }
-    if (estado) estado.textContent = `${socio.rol || 'SOCIO'} · ${socio.moneda_base || 'USDT'} · ${socio.id_grupo || 'sin JID'}`;
-    const monedas = socio.monedas || {};
-    const tarjetas = MONEDAS.map((code) => {
-      const regla = monedas[code] || {};
-      const activo = regla.activo !== false;
-      const porcentaje = regla.porcentaje || {};
-      return `<div class="panel stack" data-moneda="${code}">
-        <label class="check"><input type="checkbox" data-activo="${code}" ${activo ? 'checked' : ''}> <strong class="mono">${code}</strong></label>
-        <div class="grid cols-2">
-          <label class="field"><span class="label">Depósito</span><input class="input" type="number" step="0.01" data-dep="${code}" value="${toNumber(porcentaje.deposito ?? regla.deposito)}"></label>
-          <label class="field"><span class="label">Pago</span><input class="input" type="number" step="0.01" data-pago="${code}" value="${toNumber(porcentaje.pago ?? regla.pago)}"></label>
-        </div>
-        <small class="tiny muted">${activo ? formatPercent(porcentaje.deposito ?? 0) : 'Desactivada'}</small>
-      </div>`;
-    }).join('');
-    host.innerHTML = `<div class="grid cols-3">${tarjetas}</div>`;
-    host.dataset.socio = escapeHTML(socio.nombre);
+  function cerrarHojaSocios() {
+    cerrarModal('partnerSheet');
   }
 
-  function recolectar() {
-    const socio = ctx.state.selected;
-    if (!socio) return null;
-    const monedas = {};
-    for (const code of MONEDAS) {
-      const activo = qs(`[data-activo="${code}"]`)?.checked ?? false;
-      const deposito = toNumber(qs(`[data-dep="${code}"]`)?.value);
-      const pago = toNumber(qs(`[data-pago="${code}"]`)?.value);
-      monedas[code] = { activo, porcentaje: { deposito, pago } };
-    }
-    return { monedas };
+  function seleccionarSocio(nombre) {
+    const socio = state.socios.find(
+      (candidato) => String(candidato.nombre).toLowerCase() === String(nombre).toLowerCase()
+    );
+    if (!socio) return;
+
+    if (!socio.monedas) socio.monedas = {};
+    state.socioActivo = socio;
+    etiquetaSocio.textContent = socio.nombre;
+    etiquetaBase.textContent = `Base: ${socio.moneda_base || 'USDT'}`;
+    actualizarPerfilUI(socio.activo !== false);
+    renderChecklist();
+    cerrarHojaSocios();
   }
 
-  async function guardar() {
-    const socio = ctx.state.selected;
-    const cambios = recolectar();
-    if (!socio || !cambios) return;
+  function abrirHojaSocios() {
+    abrirModal('partnerSheet');
+    renderPartnerList(listaSocios, state.socios, '', seleccionarSocio);
+  }
+
+  function filtrarSocios() {
+    renderPartnerList(listaSocios, state.socios, buscador.value, seleccionarSocio);
+  }
+
+  function alternarPais(code) {
+    if (!state.socioActivo || state.socioActivo.activo === false) return;
+    if (!state.socioActivo.monedas[code]) state.socioActivo.monedas[code] = {};
+    state.socioActivo.monedas[code].activo = !state.socioActivo.monedas[code].activo;
+    renderChecklist();
+  }
+
+  function marcarTodos(status) {
+    if (!state.socioActivo || state.socioActivo.activo === false) return;
+    MONEDAS_CHECKLIST.forEach((code) => {
+      if (!state.socioActivo.monedas[code]) state.socioActivo.monedas[code] = {};
+      state.socioActivo.monedas[code].activo = status;
+    });
+    renderChecklist();
+  }
+
+  function alternarPerfil() {
+    if (!state.socioActivo) return;
+    state.socioActivo.activo = state.socioActivo.activo === false;
+    actualizarPerfilUI(state.socioActivo.activo);
+  }
+
+  async function guardarCambios() {
+    if (!state.socioActivo) return;
     try {
-      const data = await ctx.api.guardarSocio(socio.nombre, cambios);
-      const actualizado = data.socio || { ...socio, ...cambios };
-      ctx.state.socios = ctx.state.socios.map((item) => item.nombre === socio.nombre ? actualizado : item);
-      ctx.state.selected = actualizado;
-      render();
-      ctx.notify.success('Cambios del socio guardados.');
-    } catch (err) {
-      ctx.notify.error(err.message || 'No se pudieron guardar los cambios.');
+      await api.guardarSocio(state.socioActivo.nombre, {
+        monedas: state.socioActivo.monedas,
+        activo: state.socioActivo.activo,
+        modo_prueba: state.socioActivo.modo_prueba
+      });
+      showToast(`💾 Guardado para ${state.socioActivo.nombre}`);
+    } catch (error) {
+      showToast(`❌ ${error.message}`);
     }
   }
 
-  function mount() {
-    if (mounted) return;
-    mounted = true;
-    qs('#socio-select')?.addEventListener('change', (event) => seleccionar(event.target.value));
-    qs('#btn-guardar-socio')?.addEventListener('click', guardar);
-    qs('#btn-cartelera')?.addEventListener('click', () => {
-      if (ctx.state.selected) abrirCartelera(ctx, ctx.state.selected);
-      else ctx.notify.error('Seleccione un socio.');
-    });
-    qs('#btn-disparar')?.addEventListener('click', async () => {
-      if (!ctx.state.selected) return;
-      try {
-        await ctx.api.disparar(ctx.state.selected.nombre, ctx.state.test);
-        ctx.notify.success(`Cartelera disparada a ${ctx.state.selected.nombre}.`);
-      } catch (err) {
-        ctx.notify.error(err.message || 'No se pudo disparar la cartelera.');
+  async function refresh() {
+    try {
+      const datos = await api.socios();
+      if (datos.socios?.length > 0) {
+        state.socios = datos.socios;
+        seleccionarSocio(state.socios[0].nombre);
       }
-    });
+    } catch (error) {
+      console.error('Error socios:', error);
+    }
   }
 
-  function show() {
-    if (!ctx.state.selected && ctx.state.socios[0]) ctx.state.selected = ctx.state.socios[0];
-    const select = qs('#socio-select');
-    if (select && ctx.state.selected) select.value = ctx.state.selected.nombre;
-    render();
-  }
+  qs('#btnOpenPartner').addEventListener('click', abrirHojaSocios);
+  qs('#btnTogglePerfil').addEventListener('click', alternarPerfil);
+  qs('#btnGuardarSocio').addEventListener('click', guardarCambios);
+  buscador.addEventListener('input', filtrarSocios);
+  document.querySelectorAll('[data-check-all]').forEach((boton) => {
+    boton.addEventListener('click', () => marcarTodos(boton.dataset.checkAll === 'true'));
+  });
 
-  return { mount, show, setSocios, render, seleccionar };
+  return { refresh, seleccionarSocio };
 }

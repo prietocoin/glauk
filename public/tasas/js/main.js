@@ -1,88 +1,41 @@
-import { qs, qsa, on } from '../../shared/js/dom.js';
-import { success, error, info } from '../../shared/js/toast.js';
-import { formatMoney } from '../../shared/js/format.js';
-import { api } from './api.js';
-import { crearVistaMonitor } from './views/monitor.js';
-import { crearVistaLotes } from './views/lotes.js';
-import { crearVistaSocios } from './views/socios.js';
-import { crearVistaHoo } from './views/hoo.js';
+import { qsa } from '../../shared/js/dom.js';
+import { initPWA } from './pwa.js';
+import { cerrarModal } from './ui/modal.js';
+import { initMonitor } from './views/monitor.js';
+import { initSocios } from './views/socios.js';
+import { initPreview } from './views/preview.js';
 
-const state = {
-  view: 'monitor', socios: [], selected: null, monitor: { id_tasa: 'T000', tasas: {} },
-  borrador: {}, test: true
-};
+const monitor = initMonitor();
+const socios = initSocios();
+initPreview();
 
-const ctx = {
-  api, state,
-  notify: { success, error, info },
-  formatMoney,
-  navigate,
-  openCartelera: null
-};
+function switchTab(numero) {
+  const esMonitor = numero === 1;
+  document.getElementById('tab1').classList.toggle('hidden', !esMonitor);
+  document.getElementById('tab2').classList.toggle('hidden', esMonitor);
+  document.getElementById('stickyFooter').classList.toggle('hidden', esMonitor);
 
-const views = {
-  monitor: crearVistaMonitor(ctx),
-  lotes: crearVistaLotes(ctx),
-  socios: crearVistaSocios(ctx),
-  hoo: crearVistaHoo(ctx)
-};
-ctx.monitor = views.monitor;
-ctx.sociosView = views.socios;
-
-function navigate(view) {
-  state.view = view;
-  qsa('[data-view]').forEach((tab) => tab.classList.toggle('active', tab.dataset.view === view));
-  qsa('.view').forEach((section) => section.classList.toggle('hidden', section.id !== `view-${view}`));
-  views[view]?.show?.();
+  const boton1 = document.getElementById('btnTab1');
+  const boton2 = document.getElementById('btnTab2');
+  boton1.classList.toggle('active', esMonitor);
+  boton2.classList.toggle('active', !esMonitor);
+  boton1.setAttribute('aria-selected', String(esMonitor));
+  boton2.setAttribute('aria-selected', String(!esMonitor));
 }
 
-async function cargarSocios() {
-  try {
-    state.socios = await api.socios();
-    views.socios.setSocios(state.socios);
-  } catch (err) {
-    error(err.message || 'No se pudieron cargar los socios.');
-  }
-}
+qsa('[data-tab]').forEach((boton) => {
+  boton.addEventListener('click', () => switchTab(Number(boton.dataset.tab)));
+});
 
-function registrarServiceWorker() {
-  if (!('serviceWorker' in navigator)) return;
-  const script = new URL('../sw.js', import.meta.url);
-  const scope = new URL('../', import.meta.url).pathname;
-  navigator.serviceWorker.register(script, { scope }).catch(() => {
-    /* el panel sigue funcionando sin modo offline */
-  });
-}
+document.addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-close-modal]');
+  if (boton) cerrarModal(boton.dataset.closeModal);
+});
 
-function instalarPWA() {
-  let prompt = null;
-  const button = qs('#btn-install');
-  globalThis.addEventListener('beforeinstallprompt', (event) => {
-    event.preventDefault();
-    prompt = event;
-    button?.classList.remove('hidden');
-  });
-  button?.addEventListener('click', async () => {
-    if (!prompt) return;
-    prompt.prompt();
-    await prompt.userChoice;
-    prompt = null;
-    button.classList.add('hidden');
-  });
-}
+switchTab(1);
+initPWA();
 
-async function boot() {
-  qsa('[data-view]').forEach((tab) => tab.addEventListener('click', () => navigate(tab.dataset.view)));
-  qs('#btn-ir-lotes')?.addEventListener('click', () => navigate('lotes'));
-  views.monitor.mount();
-  views.lotes.mount();
-  views.socios.mount();
-  views.hoo.mount();
-  instalarPWA();
-  registrarServiceWorker();
-  await Promise.all([views.monitor.show(), cargarSocios()]);
-  navigate('monitor');
-}
-
-on(document, 'click', '[data-navigate]', (_event, target) => navigate(target.dataset.navigate));
-boot().catch((err) => error(err.message || 'No se pudo iniciar TasasHub.'));
+window.addEventListener('load', async () => {
+  await monitor.refresh();
+  await socios.refresh();
+});
