@@ -1,102 +1,50 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#030611">
   <meta name="description" content="PerfilHub: directorio de socios, reglas y plantillas.">
-  <title>PerfilHub · Directorio de socios</title>
+  <title>PerfilHub Engine - Directorio de Socios</title>
   <link rel="icon" type="image/svg+xml" href="../shared/brand/favicon.svg">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="../shared/css/base.css">
-  <link rel="stylesheet" href="../shared/css/components.css">
-  <link rel="stylesheet" href="../shared/css/print.css">
+  <link rel="stylesheet" href="./css/tailwind.css">
+  <link rel="stylesheet" href="./css/perfiles.css">
 </head>
-<body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="topbar-inner">
-        <a class="brand" href="../">
-          <img src="../shared/brand/logo-fundablock.png" alt="FUNDABLOCK">
-          <span><strong>PerfilHub</strong><small>DIRECTORIO DE SOCIOS</small></span>
-        </a>
-        <nav class="tabs" aria-label="Secciones de Perfiles">
-          <button class="tab active" type="button" data-view="directorio">Directorio</button>
-          <button class="tab" type="button" data-view="editor">Editor</button>
-          <button class="tab" type="button" data-view="plantilla">Plantilla</button>
-        </nav>
-        <span class="badge badge-purple" id="perfiles-count">0 socios</span>
+
+<body class="bg-[#030611] text-slate-100 min-h-screen p-4 md:p-6">
+  <div class="max-w-7xl mx-auto space-y-6">
+
+    <!-- ENCABEZADO Y CONTROLES GLOBALES -->
+    <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+      <div>
+        <a href="/comprobantes/" class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-cyan-300 transition-colors mb-2 no-underline">← Volver a Comprobantes</a>
+        <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+          <span>Directorio de Socios</span>
+          <span class="text-xs font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">PERFILHUB</span>
+        </h1>
+        <p id="perfiles-total" class="text-xs text-slate-400 font-mono mt-0.5">Total: 0 socios registrados</p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="btn-refrescar" type="button" class="px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-400 text-xs font-semibold hover:bg-amber-500/20 transition flex items-center gap-1.5">🌐 FUNDDA</button>
+        <button id="btn-apagar-todos" type="button" class="px-3 py-1.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-400 text-xs font-semibold hover:bg-rose-500/20 transition flex items-center gap-1.5">🔴 Apagar Todos</button>
+        <button id="btn-memorizar" type="button" class="px-3 py-1.5 rounded-lg border border-purple-500/40 bg-purple-600/20 text-purple-300 text-xs font-semibold hover:bg-purple-600/30 transition flex items-center gap-1.5">📌 Guardar</button>
+        <button id="btn-restaurar" type="button" class="px-3 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/20 transition flex items-center gap-1.5">📄 Restaurar</button>
+        <button id="btn-nuevo" type="button" class="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold transition flex items-center gap-1">+ Nuevo</button>
       </div>
     </header>
 
-    <main class="container page stack">
-      <section class="view stack" id="view-directorio">
-        <div class="card">
-          <div class="card-head">
-            <div><h2>Directorio maestro</h2><p class="small">Reglas por país, moneda base y actividad publicada.</p></div>
-            <div class="row">
-              <button class="btn btn-secondary btn-sm" id="btn-refrescar" type="button">Actualizar</button>
-              <button class="btn btn-accent btn-sm" id="btn-nuevo" type="button">Nuevo socio</button>
-            </div>
-          </div>
-          <div class="card-body stack">
-            <div class="row">
-              <div class="field grow"><label class="label" for="perfiles-busqueda">Buscar</label><input class="input" id="perfiles-busqueda" placeholder="Nombre, rol, grupo o moneda"></div>
-              <div class="field"><label class="label" for="perfiles-filtro">Estado</label><select class="select" id="perfiles-filtro"><option value="">Todos</option><option value="activo">Activos</option><option value="inactivo">Inactivos</option></select></div>
-            </div>
-            <div class="kpis" id="perfiles-resumen"></div>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>Socio</th><th>Rol</th><th>Moneda base</th><th>Monedas</th><th>Estado</th><th>Acciones</th></tr></thead>
-                <tbody id="perfiles-tabla"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
+    <!-- BARRA DE BÚSQUEDA -->
+    <div class="relative">
+      <input id="perfiles-busqueda" type="text" placeholder="Buscar socio..." autocomplete="off" class="w-full bg-[#070e23] border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/40 transition">
+    </div>
 
-      <section class="view hidden stack" id="view-editor">
-        <div class="card">
-          <div class="card-head"><div><h2 id="editor-titulo">Editar socio</h2><p class="small">Los cambios se guardan en perfiles_glaukov.</p></div><span class="badge badge-accent" id="editor-badge">Nuevo</span></div>
-          <form class="card-body stack" id="perfil-form">
-            <div class="grid cols-3">
-              <label class="field"><span class="label">Nombre</span><input class="input" id="editor-nombre" required></label>
-              <label class="field"><span class="label">ID de grupo / JID</span><input class="input" id="editor-grupo"></label>
-              <label class="field"><span class="label">Rol</span><input class="input" id="editor-rol" placeholder="SOCIO"></label>
-              <label class="field"><span class="label">Moneda base</span><input class="input" id="editor-base" placeholder="USDT"></label>
-              <label class="field"><span class="label">Saldo inicial</span><input class="input" id="editor-saldo" type="number" step="0.01" value="0"></label>
-              <label class="field"><span class="label">Herencia</span><span class="check"><input type="checkbox" id="editor-herencia"> Heredar reglas del grupo</span></label>
-            </div>
-            <div class="card-head" style="padding:0;border:0"><div><h3>Monedas y márgenes</h3><p class="small">Porcentaje de depósito suma; pago resta.</p></div></div>
-            <div class="grid cols-3" id="monedas-grid"></div>
-            <div class="row between">
-              <button class="btn btn-secondary" id="btn-cancelar-editor" type="button">Cancelar</button>
-              <button class="btn btn-success" type="submit">Guardar socio</button>
-            </div>
-          </form>
-        </div>
-      </section>
-
-      <section class="view hidden stack" id="view-plantilla">
-        <div class="card">
-          <div class="card-head"><div><h2>Plantilla de visibilidad</h2><p class="small">Congela o restaura qué socios publican tasas.</p></div></div>
-          <div class="card-body stack">
-            <div class="panel stack"><strong>Estado actual</strong><span class="small muted" id="plantilla-estado">Consulte el directorio para ver el estado.</span></div>
-            <div class="row">
-              <button class="btn btn-primary" id="btn-memorizar" type="button">Memorizar plantilla</button>
-              <button class="btn btn-success" id="btn-restaurar" type="button">Restaurar plantilla</button>
-              <button class="btn btn-danger" id="btn-apagar-todos" type="button">Apagar todos</button>
-            </div>
-            <p class="small muted">GENERAL permanece activo. La plantilla no cambia los porcentajes ni las monedas de cada socio.</p>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="footer"><div class="container row between"><span>PerfilHub · Glauk</span><span>Assets locales</span></div></footer>
+    <!-- LISTADO DE SOCIOS -->
+    <div id="perfiles-lista" class="space-y-2.5" aria-live="polite"></div>
   </div>
-  <div id="modal-root"></div>
-  <div class="toast-host" id="toast-host" aria-live="polite"></div>
+
+  <div id="perfiles-modal-root"></div>
   <script type="module" src="./js/main.js"></script>
 </body>
 </html>

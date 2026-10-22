@@ -1,11 +1,15 @@
-const CACHE = 'glauk-perfiles-v1';
+const CACHE = 'glauk-perfiles-v2';
 const ASSETS = [
-  './', './index.html', './manifest.json', './js/main.js', './js/api.js',
-  './js/views/directorio.js', './js/views/editor.js', './js/views/plantilla.js',
-  '../shared/css/base.css', '../shared/css/components.css', '../shared/css/print.css',
-  '../shared/js/dom.js', '../shared/js/http.js', '../shared/js/format.js',
-  '../shared/js/toast.js', '../shared/brand/favicon.svg',
-  '../shared/brand/logo-fundablock.png'
+  './', './index.html', './manifest.json',
+  './css/tailwind.css', './css/perfiles.css',
+  './js/main.js', './js/api.js', './js/store.js', './js/domain.js', './js/catalog.js',
+  './js/components/socio-card.js', './js/components/lista-socios.js',
+  './js/components/modal-socio.js', './js/components/reglas-herencia.js',
+  './js/components/reglas-editor.js',
+  './js/controllers/directorio.js', './js/controllers/editor.js',
+  './js/controllers/acciones.js',
+  '../shared/js/dom.js', '../shared/js/http.js',
+  '../shared/brand/favicon.svg', '../shared/brand/logo-fundablock.png'
 ];
 
 self.addEventListener('install', (event) => {
