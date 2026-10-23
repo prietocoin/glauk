@@ -12,9 +12,12 @@ import (
 const upsertExtraccionSQL = `
 INSERT INTO comprobantes_raw (
     hash_largo, monto, moneda, banco, referencia, titular,
-    url_r2, instancia, estado_ia, procesado_ia
+    procesado_ia, url_r2, estado_ia, instancia, creado_en
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PROCESADO', TRUE)
+VALUES (
+    $1::varchar, $2::numeric, $3::varchar, $4::varchar, $5::varchar, $6::varchar,
+    TRUE, $7::text, 'PROCESADO', $8::varchar, NOW()
+)
 ON CONFLICT (hash_largo) DO UPDATE SET
     monto = EXCLUDED.monto,
     moneda = EXCLUDED.moneda,

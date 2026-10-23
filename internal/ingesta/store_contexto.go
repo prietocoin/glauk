@@ -25,15 +25,16 @@ UPDATE registros_raw SET url_imagen = $2::text
 WHERE hash_largo = $1::varchar AND (url_imagen IS NULL OR url_imagen = '')`
 
 const contextoComprobanteSQL = `
-SELECT COALESCE(hash_corto, ''), COALESCE(instancia, ''), COALESCE(url_r2, ''),
+SELECT COALESCE(instancia, ''), COALESCE(url_r2, ''),
        COALESCE(monto, 0), COALESCE(moneda, ''), COALESCE(banco, ''),
-       COALESCE(titular, ''), COALESCE(referencia, ''), COALESCE(procesado_ia, FALSE)
+       COALESCE(titular, ''), COALESCE(referencia, ''), COALESCE(procesado_ia, FALSE),
+       COALESCE(EXTRACT(EPOCH FROM creado_en)::bigint, 0)
 FROM comprobantes_raw
 WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1::varchar))
 LIMIT 1`
 
 const contextoImpactosSQL = `
-SELECT COALESCE(grupo_raw, ''), COALESCE(caption, ''),
+SELECT COALESCE(hash_corto, ''), COALESCE(grupo_raw, ''), COALESCE(caption, ''),
        COALESCE(timestamp_msg, 0), COALESCE(url_imagen, '')
 FROM impactos_raw
 WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1::varchar))
@@ -72,10 +73,11 @@ func (r *Repository) ActualizarImagen(ctx context.Context, hash, url string) err
 // de los dos impactos. No es un error que el comprobante todavía no exista.
 func (r *Repository) Contexto(ctx context.Context, hash string) (Contexto, error) {
 	result := Contexto{HashLargo: hash}
+	var creadoEn int64
 	err := r.db.QueryRow(ctx, contextoComprobanteSQL, hash).Scan(
-		&result.HashCorto, &result.Instancia, &result.URLImagen,
+		&result.Instancia, &result.URLImagen,
 		&result.Monto, &result.Moneda, &result.Banco,
-		&result.Titular, &result.Referencia, &result.Procesado,
+		&result.Titular, &result.Referencia, &result.Procesado, &creadoEn,
 	)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Contexto{}, r.sqlFail("select_comprobantes_raw_contexto",
@@ -90,11 +92,14 @@ func (r *Repository) Contexto(ctx context.Context, hash string) (Contexto, error
 	defer rows.Close()
 
 	for rows.Next() {
-		var grupo, caption, url string
+		var hashCorto, grupo, caption, url string
 		var timestamp int64
-		if err := rows.Scan(&grupo, &caption, &timestamp, &url); err != nil {
+		if err := rows.Scan(&hashCorto, &grupo, &caption, &timestamp, &url); err != nil {
 			return Contexto{}, r.sqlFail("scan_impactos_raw_contexto",
 				fmt.Errorf("ingesta: escanear impacto: %w", err))
+		}
+		if result.HashCorto == "" && hashCorto != "" {
+			result.HashCorto = hashCorto
 		}
 		if result.Caption == "" && caption != "" {
 			result.Caption = caption
@@ -112,6 +117,9 @@ func (r *Repository) Contexto(ctx context.Context, hash string) (Contexto, error
 	if err := rows.Err(); err != nil {
 		return Contexto{}, r.sqlFail("rows_impactos_raw_contexto",
 			fmt.Errorf("ingesta: recorrer impactos: %w", err))
+	}
+	if result.Timestamp == 0 && creadoEn > 0 {
+		result.Timestamp = creadoEn
 	}
 	return result, nil
 }
