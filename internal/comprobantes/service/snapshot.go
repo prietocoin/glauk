@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 
 	"glauk/internal/comprobantes/calc"
 	"glauk/internal/comprobantes/domain"
@@ -9,10 +10,21 @@ import (
 	"glauk/internal/comprobantes/store"
 )
 
-// buildSnapshot recalcula el congelado con las lecturas de la misma transacción.
+// buildSnapshot recalcula el snapshot financiero completo con los perfiles
+// vigentes dentro de la misma transacción.
+//
+// Un payload parcial conserva el socio, tipo y lote ya persistidos: editar el
+// monto o el banco no debe degradar la liquidación a GENERAL ni cambiar el lote.
 func (s *Service) buildSnapshot(ctx context.Context, tx store.Tx, hash string,
-	update store.RawUpdate, input dto.UpdateInput) (domain.Liquidacion, error) {
-	loteID := input.Lote()
+	update store.RawUpdate, input dto.UpdateInput,
+	actual domain.Liquidacion) (domain.Liquidacion, error) {
+	loteID := actual.LoteTasa
+	if value, ok := input.LoteOpcional(); ok {
+		loteID = value
+	}
+	if strings.TrimSpace(loteID) == "" {
+		loteID = dto.DefaultLoteTasa
+	}
 	lote, err := tx.RateLotByID(ctx, loteID)
 	if err != nil {
 		return domain.Liquidacion{}, err
@@ -23,11 +35,36 @@ func (s *Service) buildSnapshot(ctx context.Context, tx store.Tx, hash string,
 			return domain.Liquidacion{}, err
 		}
 	}
-	socio1, err := tx.ProfileByName(ctx, input.Socio1Nombre())
+	socio1Nombre := actual.Socio1
+	if value, ok := input.Socio1Opcional(); ok {
+		socio1Nombre = value
+	}
+	if strings.TrimSpace(socio1Nombre) == "" {
+		socio1Nombre = dto.DefaultSocio
+	}
+	socio2Nombre := ""
+	if actual.Socio2 != nil {
+		socio2Nombre = strings.TrimSpace(*actual.Socio2)
+	}
+	if value, ok := input.Socio2Opcional(); ok {
+		socio2Nombre = value
+	}
+	if strings.TrimSpace(socio2Nombre) == "" {
+		socio2Nombre = dto.DefaultSocio
+	}
+	tipo := actual.TipoOp1
+	if value, ok := input.TipoOpcional(); ok {
+		tipo = value
+	}
+	if strings.TrimSpace(tipo) == "" {
+		tipo = dto.DefaultTipo
+	}
+
+	socio1, err := tx.ProfileByName(ctx, socio1Nombre)
 	if err != nil {
 		return domain.Liquidacion{}, err
 	}
-	socio2, err := tx.ProfileByName(ctx, input.Socio2Nombre())
+	socio2, err := tx.ProfileByName(ctx, socio2Nombre)
 	if err != nil {
 		return domain.Liquidacion{}, err
 	}
@@ -37,7 +74,6 @@ func (s *Service) buildSnapshot(ctx context.Context, tx store.Tx, hash string,
 	}
 
 	moneda := domain.NormalizeCurrency(update.Moneda, "COP")
-	tipo := input.TipoValor()
 	liq := calc.CalcularSnapshotFinanciero(calc.Raw{
 		HashLargo: hash, Monto: update.Monto, Moneda: moneda,
 		TipoManual: tipo, IDTasa: loteID,
@@ -45,18 +81,5 @@ func (s *Service) buildSnapshot(ctx context.Context, tx store.Tx, hash string,
 
 	etiqueta := calc.OperationNature(tipo) + "-" + moneda
 	liq.TipoOp1, liq.TipoOp2 = etiqueta, etiqueta
-	tasas := calc.MergeRates(lote.Tasas)
-	base1 := calc.SnapshotRate(tasas, calc.CurrencyOf(socio1.MonedaBase))
-	base2 := calc.SnapshotRate(tasas, calc.CurrencyOf(socio2.MonedaBase))
-	if value, ok := input.Monto1Valor(); ok {
-		// El override manual cambia el nominal; el ME debe seguirlo con la
-		// misma tasa base que usó el snapshot para no quedar incoherente.
-		liq.Monto1 = value
-		liq.ME1 = calc.TruncateAmount(value / base1)
-	}
-	if value, ok := input.Monto2Valor(); ok {
-		liq.Monto2 = value
-		liq.ME2 = calc.TruncateAmount(value / base2)
-	}
 	return liq, nil
 }

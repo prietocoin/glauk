@@ -6,19 +6,36 @@ import (
 	"glauk/internal/comprobantes/domain"
 )
 
+// EffectivePolarity resuelve la polaridad del contrato para la operación.
+//
+// La fuente de verdad es polar_D / polar_P. polaridad queda como respaldo para
+// perfiles históricos que todavía no distinguían depósito de pago.
+func EffectivePolarity(conf CurrencyConfig, tipoLetra string) string {
+	deposito := domain.FirstNonEmpty(conf.PolarD, conf.Polaridad, "+")
+	switch tipoLetra {
+	case "P":
+		if pago := strings.TrimSpace(conf.PolarP); pago != "" {
+			return pago
+		}
+		// La polaridad histórica describía solo el depósito: el pago era su
+		// contrapartida. Se conserva esa semántica cuando falta polar_P.
+		if deposito == "-" {
+			return "+"
+		}
+		return "-"
+	case "D":
+		return deposito
+	default:
+		return "+"
+	}
+}
+
 // NaturalSign aplica la polaridad del contrato y la naturaleza de operación.
 func NaturalSign(cfg SocioConfig, tipoOp string) int {
 	if !cfg.Active || tipoOp == "A" {
 		return 1
 	}
-	depositoSuma := cfg.Conf.Polaridad == "+"
-	if tipoOp == "D" {
-		if depositoSuma {
-			return 1
-		}
-		return -1
-	}
-	if depositoSuma {
+	if EffectivePolarity(cfg.Conf, tipoOp) == "-" {
 		return -1
 	}
 	return 1
@@ -35,17 +52,19 @@ func OperationNature(value string) string {
 
 // SideSigns resuelve el signo de cada lado con la polaridad natural del
 // contrato, la regla de abono y el ancla de herencia. Es la única fuente de
-// verdad tanto para el snapshot congelado como para la proyección live.
+// verdad tanto para el snapshot persistido como para la proyección live.
 //
-// Si exactamente un lado hereda de FUNDDA, su signo se invierte para quedar
-// opuesto al lado no heredante. Si ambos heredan, no hay override.
-func SideSigns(cfg1, cfg2 SocioConfig, tipoOp string) (int, int) {
+// El abono depende del rol de la matriz: si el socio 1 es FUNDDA, la matriz
+// resta y el socio suma; en cualquier otro caso, al revés.
+func SideSigns(cfg1, cfg2 SocioConfig, tipoOp, socio1 string) (int, int) {
+	if tipoOp == "A" {
+		if strings.EqualFold(strings.TrimSpace(socio1), "FUNDDA") {
+			return -1, 1
+		}
+		return 1, -1
+	}
 	signo1 := NaturalSign(cfg1, tipoOp)
 	signo2 := NaturalSign(cfg2, tipoOp)
-	if tipoOp == "A" {
-		// El abono es contrapartida: socio 1 suma, socio 2 resta.
-		signo1, signo2 = 1, -1
-	}
 	if cfg1.Active && cfg2.Active {
 		if cfg1.HereDa && !cfg2.HereDa {
 			signo1 = -signo2

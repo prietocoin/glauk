@@ -18,6 +18,7 @@ type sqlExecutor interface {
 // Tx expone las operaciones que el servicio debe ejecutar en una transacción.
 type Tx interface {
 	LockComprobante(ctx context.Context, hash string) (RawComprobante, error)
+	LiquidacionActual(ctx context.Context, hash string) (domain.Liquidacion, bool, error)
 	UpdateComprobante(ctx context.Context, hash string, data RawUpdate) error
 	UpsertLiquidacion(ctx context.Context, liq domain.Liquidacion) error
 	DeleteComprobante(ctx context.Context, hash string) error

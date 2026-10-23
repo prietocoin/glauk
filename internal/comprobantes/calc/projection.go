@@ -9,9 +9,9 @@ import (
 
 // ProjectRow transforma una fila cruda en el contrato de auditoría.
 //
-// Si la fila está liquidada, los importes congelados mandan y no se vuelven a
-// firmar. Solo las filas live aplican la polaridad del contrato y el ancla de
-// herencia, con la misma función que usa el snapshot.
+// La proyección es siempre viva: resuelve el contrato actual de cada socio y
+// recalcula tasas, comisiones, equivalencias y signos. comprobantes_liq solo
+// aporta los socios asignados; los importes no se leen congelados.
 func ProjectRow(row SourceRow, fundda Profile) domain.Comprobante {
 	monto := math.Abs(TruncateAmount(row.Monto))
 	liquidado := row.EstaLiquidado
@@ -30,12 +30,9 @@ func ProjectRow(row SourceRow, fundda Profile) domain.Comprobante {
 	cfg2 := ResolveLiveSocioConfig(socio2Nombre, profile2, divisa, fundda, monedaSocio2)
 	tipoLetra := operationLetter(row, cfg1.Conf, socio1, monedaSocio1, divisa)
 	tipoTag := tipoLetra + "-" + divisa
-	signo1, signo2 := 0, 0
-	if !liquidado {
-		signo1, signo2 = SideSigns(cfg1, cfg2, tipoLetra)
-	}
+	signo1, signo2 := SideSigns(cfg1, cfg2, tipoLetra, socio1)
 	tasa1, monto1, me1, tasa2, monto2, me2 := CalculateAmounts(
-		row, liquidado, monto, divisa,
+		row, monto, divisa,
 		cfg1, cfg2, tipoLetra, signo1, signo2, socio2 != nil,
 	)
 	return domain.Comprobante{

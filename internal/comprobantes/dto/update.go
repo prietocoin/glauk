@@ -1,6 +1,10 @@
 package dto
 
-import "glauk/internal/comprobantes/domain"
+import (
+	"strings"
+
+	"glauk/internal/comprobantes/domain"
+)
 
 // UpdateInput es el payload de PUT /api/v1/comprobantes/:hashLargo.
 //
@@ -79,6 +83,31 @@ func (i UpdateInput) Monto2Valor() (float64, bool) {
 		return i.M2Socio.Value, true
 	}
 	return 0, false
+}
+
+// Socio1Opcional distingue un socio enviado explícitamente de uno omitido.
+// Omitir el campo debe conservar el socio actual de comprobantes_liq.
+func (i UpdateInput) Socio1Opcional() (string, bool) {
+	value := strings.TrimSpace(firstNonEmpty(i.NombreSocio1, i.Socio1, i.Socio1Legacy))
+	return value, value != ""
+}
+
+// Socio2Opcional distingue un socio enviado explícitamente de uno omitido.
+func (i UpdateInput) Socio2Opcional() (string, bool) {
+	value := strings.TrimSpace(firstNonEmpty(i.NombreSocio2, i.Socio2, i.Socio2Legacy))
+	return value, value != ""
+}
+
+// TipoOpcional devuelve la naturaleza solo si el payload la especificó.
+func (i UpdateInput) TipoOpcional() (string, bool) {
+	value := strings.TrimSpace(firstNonEmpty(i.TipoManual, i.TipoOp1, i.TipoOp))
+	return value, value != ""
+}
+
+// LoteOpcional devuelve el lote solo si el payload lo especificó.
+func (i UpdateInput) LoteOpcional() (string, bool) {
+	value := strings.TrimSpace(firstNonEmpty(i.LoteTasaAsignado, i.LoteTasa, i.IDTasa))
+	return value, value != ""
 }
 
 // NormalizedCurrency devuelve la divisa que se persistirá en comprobantes_raw.

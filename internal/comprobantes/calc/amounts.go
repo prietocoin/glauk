@@ -42,16 +42,14 @@ func SignedDivision(signo int, monto, tasa float64) float64 {
 	return float64(signo) * monto
 }
 
-// CalculateAmounts proyecta una fila live o devuelve el snapshot congelado.
+// CalculateAmounts proyecta una fila con el contrato vigente de los socios.
 //
-// Los signos solo se usan para la rama live. Si la fila ya está liquidada, el
-// snapshot persistido es la fuente de verdad y se devuelve sin recalcular.
-func CalculateAmounts(row SourceRow, liquidado bool, monto float64, divisa string,
+// No existe una rama "congelada": tanto la vista previa como el listado
+// recalculan tasas, comisiones, equivalencias y signos con la configuración
+// actual de perfiles_glaukov.
+func CalculateAmounts(row SourceRow, monto float64, divisa string,
 	cfg1, cfg2 SocioConfig, tipoLetra string,
 	signo1, signo2 int, hasSocio2 bool) (float64, float64, float64, float64, float64, float64) {
-	if liquidado {
-		return FrozenAmounts(row)
-	}
 	tasas := DecodeRates(row.TasasLote)
 	tasaBaseDivisa := RateOr(tasas, divisa)
 	tasaBase1 := RateOr(tasas, cfg1.Moneda)
@@ -78,12 +76,4 @@ func CalculateAmounts(row SourceRow, liquidado bool, monto float64, divisa strin
 		tasa2 = 1
 	}
 	return tasa1, monto1, me1, tasa2, monto2, me2
-}
-
-// FrozenAmounts devuelve los importes congelados tal como los persistió el
-// snapshot. El signo almacenado manda: no se aplica valor absoluto ni se
-// re-firma con el perfil actual.
-func FrozenAmounts(row SourceRow) (float64, float64, float64, float64, float64, float64) {
-	return TasaOrOne(row.Tasa1), ValueOr(row.Monto1, 0), ValueOr(row.ME1, 0),
-		TasaOrOne(row.Tasa2), ValueOr(row.Monto2, 0), ValueOr(row.ME2, 0)
 }

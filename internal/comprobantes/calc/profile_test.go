@@ -37,6 +37,27 @@ func TestDecodeProfileToleraVacioEInvalido(t *testing.T) {
 	}
 }
 
+func TestDecodeProfileMapeaContratoMonedas(t *testing.T) {
+	got := DecodeProfile([]byte(`{"nombre":"FUNDDA","moneda_base":"USDT",` +
+		`"monedas":{"COP":{"activo":true,"tipo":"D","polar_D":"-","polar_P":"+",` +
+		`"porcentaje":{"deposito":2.5,"pago":"3"}}}}`))
+	conf, ok := got.Monedas["COP"]
+	if !ok {
+		t.Fatalf("moneda COP no mapeada: %+v", got)
+	}
+	if !conf.Activo || conf.Tipo != "D" || conf.PolarD != "-" || conf.PolarP != "+" {
+		t.Fatalf("contrato mapeado = %+v", conf)
+	}
+	if conf.Porcentaje.Deposito != 2.5 || conf.Porcentaje.Pago != 3 {
+		t.Fatalf("porcentaje mapeado = %+v", conf.Porcentaje)
+	}
+
+	off := DecodeProfile([]byte(`{"nombre":"APAGADO","monedas":{"COP":{"activo":false}}}`))
+	if off.Monedas["COP"].Activo {
+		t.Fatalf("activo=false no se respetó: %+v", off.Monedas["COP"])
+	}
+}
+
 func TestEffectiveCurrencyHerenciaYDefault(t *testing.T) {
 	fundda := Profile{Monedas: map[string]CurrencyConfig{
 		"COP": {Tipo: "A", PolarD: "-", PolarP: "+"},

@@ -37,11 +37,15 @@ func (s *Service) Update(ctx context.Context, hash string, input dto.UpdateInput
 		if err != nil {
 			return err
 		}
+		actual, _, err := tx.LiquidacionActual(ctx, target)
+		if err != nil {
+			return err
+		}
 		update := resolveRawUpdate(current, input)
 		if err := tx.UpdateComprobante(ctx, target, update); err != nil {
 			return err
 		}
-		liq, err = s.buildSnapshot(ctx, tx, target, update, input)
+		liq, err = s.buildSnapshot(ctx, tx, target, update, input, actual)
 		if err != nil {
 			return err
 		}

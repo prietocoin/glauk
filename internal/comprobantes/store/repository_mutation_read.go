@@ -53,8 +53,46 @@ const latestRateLotSQL = `
 SELECT id_tasa, tasas FROM tasas_glaukov
 ORDER BY created_at DESC, id DESC LIMIT 1`
 
+const currentLiquidacionSQL = `
+SELECT socio_1, tipo_op1, socio_2, tipo_op2, lote_tasa
+FROM comprobantes_liq
+WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))`
+
 type calcProfile = calc.Profile
 type calcRateLot = calc.RateLot
+
+// LiquidacionActual devuelve el snapshot vigente para que una edición pueda
+// conservar socio, tipo y lote cuando el payload solo cambia otros campos.
+func (t *txStore) LiquidacionActual(ctx context.Context, hash string) (domain.Liquidacion, bool, error) {
+	var liq domain.Liquidacion
+	var socio1, tipo1, socio2, tipo2, lote *string
+	err := t.tx.QueryRow(ctx, currentLiquidacionSQL, hash).Scan(
+		&socio1, &tipo1, &socio2, &tipo2, &lote,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return liq, false, nil
+	}
+	if err != nil {
+		return liq, false, fmt.Errorf("consultar liquidación actual: %w", err)
+	}
+	liq.HashLargo = strings.TrimSpace(hash)
+	liq.Socio1 = trimmedOrEmpty(socio1)
+	liq.TipoOp1 = trimmedOrEmpty(tipo1)
+	liq.TipoOp2 = trimmedOrEmpty(tipo2)
+	liq.LoteTasa = trimmedOrEmpty(lote)
+	if socio2 != nil {
+		value := strings.TrimSpace(*socio2)
+		liq.Socio2 = &value
+	}
+	return liq, true, nil
+}
+
+func trimmedOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
 
 // LockComprobante bloquea la fila base y devuelve sus valores actuales.
 func (t *txStore) LockComprobante(ctx context.Context, hash string) (RawComprobante, error) {

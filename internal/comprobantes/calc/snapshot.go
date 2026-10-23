@@ -42,7 +42,7 @@ func CalcularSnapshotFinanciero(raw Raw, socio1, socio2 Profile, lote RateLot,
 	baseDivisa := SnapshotRate(tasas, divisa)
 	cfg1 := ResolveSocioConfig(socio1, divisa, fundda)
 	cfg2 := ResolveSocioConfig(socio2, divisa, fundda)
-	signo1, signo2 := SideSigns(cfg1, cfg2, tipoOp)
+	signo1, signo2 := SideSigns(cfg1, cfg2, tipoOp, socio1.Nombre)
 	lado1 := CalculateSide(cfg1, signo1, tipoOp, montoRaw, baseDivisa, tasas)
 	lado2 := CalculateSide(cfg2, signo2, tipoOp, montoRaw, baseDivisa, tasas)
 	etiqueta := tipoOp + "-" + divisa

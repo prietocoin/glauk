@@ -40,6 +40,25 @@ func TestMonedaTresFormas(t *testing.T) {
 	}
 }
 
+func TestMonedaMapeaContratoPolaridadYActivo(t *testing.T) {
+	raw := `{"activo":false,"tipo":"P","polar_D":"-","polar_P":"+",` +
+		`"polaridad":"-","porcentaje":{"deposito":"2.5","pago":4}}`
+	var moneda Moneda
+	if err := json.Unmarshal([]byte(raw), &moneda); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if moneda.Activo {
+		t.Fatalf("activo = true, quiero false")
+	}
+	if moneda.PolarD != "-" || moneda.PolarP != "+" || moneda.Polaridad != "-" {
+		t.Fatalf("polaridad = %+v", moneda)
+	}
+	if moneda.Porcentaje.Deposito != 2.5 || moneda.Porcentaje.Pago != 4 ||
+		moneda.Deposito != 2.5 || moneda.Pago != 4 {
+		t.Fatalf("porcentaje = %+v", moneda)
+	}
+}
+
 func TestMonedaRoundTripSuperset(t *testing.T) {
 	fixtures := []string{
 		`{"porcentaje":{"deposito":2.5,"pago":1.5}}`,

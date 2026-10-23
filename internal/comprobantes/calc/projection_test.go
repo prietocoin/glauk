@@ -10,49 +10,31 @@ import (
 
 func testPtr(value float64) *float64 { return &value }
 
-func TestSignedDivisionYFrozenAmounts(t *testing.T) {
+func TestSignedDivision(t *testing.T) {
 	if got := SignedDivision(1, 100, 0); got != 100 {
 		t.Fatalf("tasa cero = %v", got)
 	}
 	if got := SignedDivision(-1, 100, 2); got != -50 {
 		t.Fatalf("división con signo = %v", got)
 	}
-	row := SourceRow{
-		Monto1: testPtr(-120.5), ME1: testPtr(-60.25), Tasa1: testPtr(0),
-		Monto2: testPtr(40), ME2: testPtr(20), Tasa2: testPtr(4000),
-	}
-	t1, m1, me1, t2, m2, me2 := FrozenAmounts(row)
-	if t1 != 1 || m1 != -120.5 || me1 != -60.25 || t2 != 4000 || m2 != 40 || me2 != 20 {
-		t.Fatalf("frozen = %v %v %v %v %v %v", t1, m1, me1, t2, m2, me2)
-	}
-	t1, m1, me1, t2, m2, me2 = FrozenAmounts(SourceRow{})
-	if t1 != 1 || t2 != 1 || m1 != 0 || me1 != 0 || m2 != 0 || me2 != 0 {
-		t.Fatalf("frozen vacío = %v %v %v %v %v %v", t1, m1, me1, t2, m2, me2)
-	}
 }
 
-func TestCalculateAmountsLiveYCongelado(t *testing.T) {
+func TestCalculateAmountsLive(t *testing.T) {
 	row := SourceRow{TasasLote: []byte(`{"COP":4000,"USDT":1,"ARS":1000}`)}
 	cfg1 := SocioConfig{Active: true, Moneda: "USDT",
 		Conf: CurrencyConfig{Porcentaje: Spread{Deposito: 2, Pago: 3}}}
 	cfg2 := SocioConfig{Active: true, Moneda: "ARS",
 		Conf: CurrencyConfig{Porcentaje: Spread{Deposito: 0, Pago: 3}}}
 	t1, m1, me1, t2, m2, me2 := CalculateAmounts(
-		row, false, 400000, "COP", cfg1, cfg2, "D", 1, -1, true)
+		row, 400000, "COP", cfg1, cfg2, "D", 1, -1, true)
 	if t1 != 4080 || t2 != 4 || m1 != 400000.0/4080 || me1 != 400000.0/4080 ||
 		m2 != -100000 || me2 != -100 {
 		t.Fatalf("live = %v %v %v %v %v %v", t1, m1, me1, t2, m2, me2)
 	}
 	_, _, _, t2, m2, me2 = CalculateAmounts(
-		row, false, 400000, "COP", cfg1, cfg2, "D", 1, -1, false)
+		row, 400000, "COP", cfg1, cfg2, "D", 1, -1, false)
 	if t2 != 1 || m2 != 0 || me2 != 0 {
 		t.Fatalf("sin socio2 = %v %v %v", t2, m2, me2)
-	}
-	frozen := SourceRow{Monto1: testPtr(10), ME1: testPtr(5), Tasa1: testPtr(4000)}
-	t1, m1, me1, _, m2, me2 = CalculateAmounts(
-		frozen, true, 999, "COP", cfg1, cfg2, "D", 1, -1, false)
-	if t1 != 4000 || m1 != 10 || me1 != 5 || m2 != 0 || me2 != 0 {
-		t.Fatalf("congelado = %v %v %v %v %v", t1, m1, me1, m2, me2)
 	}
 }
 
@@ -89,47 +71,69 @@ func TestProjectRowLive(t *testing.T) {
 	}
 }
 
+// TestProjectRowLiquidado verifica que una fila ya liquidada se siga proyectando
+// en vivo: el socio sale de comprobantes_liq, pero el signo y las equivalencias
+// se recalculan con su contrato actual, no con los importes almacenados.
 func TestProjectRowLiquidado(t *testing.T) {
+	perfil1 := []byte(`{"nombre":"FUNDA","rol":"SOCIO","moneda_base":"USDT",` +
+		`"monedas":{"COP":{"tipo":"D","polar_D":"-","porcentaje":{"deposito":2}}}}`)
 	row := SourceRow{
 		HashLargo: "h2", Monto: -100, Moneda: "COP", EstaLiquidado: true,
-		Socio1: socioPtr(" FUNDA "), TipoOp1: socioPtr("P-COP"),
+		Socio1: socioPtr(" FUNDA "), TipoOp1: socioPtr("D-COP"),
 		Monto1: testPtr(100), Tasa1: testPtr(4000), ME1: testPtr(100),
 		Monto2: testPtr(-50), Tasa2: testPtr(1), ME2: testPtr(-50),
-		RolSocio1: "PROVEEDOR", LoteTasaHistorico: socioPtr("T049"),
+		RolSocio1: "SOCIO", MonedaSocio1: "USDT", MonedaSocio2: "USDT",
+		LoteTasaHistorico: socioPtr("T049"),
+		TasasLote:         []byte(`{"COP":4000,"USDT":1}`),
+		Socio1Row:         perfil1,
 	}
 	got := ProjectRow(row, Profile{})
-	if got.NombreSocio1 != "FUNDA" || got.NombreSocio2 != nil || got.TipoOp1 != "P-COP" {
+	if got.NombreSocio1 != "FUNDA" || got.NombreSocio2 != nil || got.TipoOp1 != "D-COP" {
 		t.Fatalf("cabecera = %+v", got)
 	}
-	if got.Monto != 100 || got.Tasa1 != 4000 || got.Monto1 != 100 || got.ME1 != 100 ||
-		got.Tasa2 != 1 || got.Monto2 != -50 || got.ME2 != -50 || got.LoteTasaAsignado != "T049" {
-		t.Fatalf("congelado = %+v", got)
+	if got.Monto != 100 || got.Tasa1 != 4080 || got.Monto2 != 0 || got.ME2 != 0 ||
+		got.LoteTasaAsignado != "T049" {
+		t.Fatalf("proyección viva = %+v", got)
+	}
+	if got.Monto1 >= 0 || got.ME1 != got.Monto1 {
+		t.Fatalf("el signo debe seguir polar_D=- del perfil: %+v", got)
+	}
+	if got.Monto1 == 100 || got.ME1 == 100 {
+		t.Fatalf("no debe reutilizar el importe almacenado: %+v", got)
 	}
 }
 
-// TestProjectRowCongeladoIgnoraPerfil verifica que una fila liquidada conserva
-// los signos persistidos aunque el perfil actual los contradiga.
-func TestProjectRowCongeladoIgnoraPerfil(t *testing.T) {
-	perfil1 := []byte(`{"nombre":"FUNDA","rol":"SOCIO","moneda_base":"USDT",` +
-		`"herencia":true,"monedas":{"COP":{"tipo":"P","polaridad":"-"}}}`)
+// TestProjectRowDepositoFUNDDAPolaridadNegativa exige que FUNDDA como socio 2
+// se proyecte con su polar_D, incluso si comprobantes_liq guardó el signo
+// opuesto. Los valores persistidos no bloquean la lectura viva.
+func TestProjectRowDepositoFUNDDAPolaridadNegativa(t *testing.T) {
+	perfil1 := []byte(`{"nombre":"SOCIO_A","rol":"SOCIO","moneda_base":"USDT",` +
+		`"monedas":{"COP":{"tipo":"D","polar_D":"+","porcentaje":{"deposito":2}}}}`)
 	perfil2 := []byte(`{"nombre":"FUNDDA","rol":"ADMIN","moneda_base":"USDT",` +
-		`"monedas":{"COP":{"tipo":"D","polaridad":"+"}}}`)
+		`"monedas":{"COP":{"tipo":"D","polar_D":"-","porcentaje":{"deposito":0}}}}`)
 	row := SourceRow{
-		HashLargo: "h3", Monto: 100, Moneda: "COP", EstaLiquidado: true,
-		Socio1: socioPtr("FUNDA"), Socio2: socioPtr("FUNDDA"),
+		HashLargo: "h3", Monto: 400000, Moneda: "COP", EstaLiquidado: true,
+		Socio1: socioPtr("SOCIO_A"), Socio2: socioPtr("FUNDDA"),
 		TipoOp1: socioPtr("D-COP"), TipoOp2: socioPtr("D-COP"),
-		Monto1: testPtr(-14.20), Tasa1: testPtr(4080), ME1: testPtr(-14.20),
-		Monto2: testPtr(14.45), Tasa2: testPtr(4000), ME2: testPtr(14.45),
+		Monto1: testPtr(98.04), Tasa1: testPtr(4080), ME1: testPtr(98.04),
+		Monto2: testPtr(200), Tasa2: testPtr(4000), ME2: testPtr(200),
+		RolSocio1: "SOCIO", MonedaSocio1: "USDT", MonedaSocio2: "USDT",
 		LoteTasa:  socioPtr("T052"),
+		TasasLote: []byte(`{"COP":4000,"USDT":1}`),
 		Socio1Row: perfil1, Socio2Row: perfil2,
 	}
 	got := ProjectRow(row, Profile{})
-	if got.Monto1 != -14.20 || got.ME1 != -14.20 ||
-		got.Monto2 != 14.45 || got.ME2 != 14.45 {
-		t.Fatalf("el congelado no debe re-firmarse: %+v", got)
+	if got.NombreSocio2 == nil || *got.NombreSocio2 != "FUNDDA" {
+		t.Fatalf("socio 2 = %+v", got)
 	}
-	if got.M1Socio != got.Monto1 || got.M2Socio != got.Monto2 {
-		t.Fatalf("m_socio debe seguir al congelado: %+v", got)
+	if got.Monto1 <= 0 || got.Monto2 >= 0 {
+		t.Fatalf("FUNDDA debe proyectarse negativa por polar_D=-: %+v", got)
+	}
+	if got.Monto2 != -100 || got.ME2 != -100 || got.Tasa2 != 4000 {
+		t.Fatalf("importe vivo de FUNDDA = %+v", got)
+	}
+	if got.M2Socio != got.Monto2 || got.M2Socio == 200 {
+		t.Fatalf("m_socio debe seguir la proyección viva: %+v", got)
 	}
 }
 

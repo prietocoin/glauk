@@ -40,15 +40,23 @@ func (s *stubRepo) DeleteQueue(context.Context, string) error { return s.deleteE
 
 type stubTx struct {
 	store.Tx
-	updated store.RawUpdate
-	lotID   string
-	liq     domain.Liquidacion
-	deleted bool
+	updated  store.RawUpdate
+	lotID    string
+	liq      domain.Liquidacion
+	deleted  bool
+	actual   domain.Liquidacion
+	profiles map[string]calc.Profile
 }
 
 func (t *stubTx) LockComprobante(context.Context, string) (store.RawComprobante, error) {
 	moneda := "COP"
 	return store.RawComprobante{Monto: 100, Moneda: &moneda}, nil
+}
+func (t *stubTx) LiquidacionActual(context.Context, string) (domain.Liquidacion, bool, error) {
+	if t.actual.HashLargo == "" {
+		return domain.Liquidacion{}, false, nil
+	}
+	return t.actual, true, nil
 }
 func (t *stubTx) UpdateComprobante(_ context.Context, _ string, data store.RawUpdate) error {
 	t.updated = data
@@ -59,6 +67,9 @@ func (t *stubTx) RateLotByID(_ context.Context, id string) (calc.RateLot, error)
 	return calc.RateLot{IDTasa: id, Tasas: map[string]float64{"COP": 4000, "USDT": 1}}, nil
 }
 func (t *stubTx) ProfileByName(_ context.Context, name string) (calc.Profile, error) {
+	if profile, ok := t.profiles[name]; ok {
+		return profile, nil
+	}
 	return calc.Profile{Nombre: name, MonedaBase: "USDT",
 		Monedas: map[string]calc.CurrencyConfig{"COP": {Polaridad: "+"}}}, nil
 }
@@ -122,6 +133,49 @@ func TestUpdateResolvesAliasesInsideTransaction(t *testing.T) {
 	}
 	if tx.liq.HashLargo != "HASH" {
 		t.Fatalf("upsert no ejecutado: %+v", tx.liq)
+	}
+}
+
+func TestUpdateRecalculaAlCambiarSocio(t *testing.T) {
+	tx := &stubTx{
+		actual: domain.Liquidacion{
+			HashLargo: "HASH", Socio1: "SOCIO_A", TipoOp1: "D-COP", LoteTasa: "T052",
+		},
+		profiles: map[string]calc.Profile{
+			"SOCIO_A": {Nombre: "SOCIO_A", MonedaBase: "USDT",
+				Monedas: map[string]calc.CurrencyConfig{"COP": {
+					Tipo: "D", PolarD: "+", Porcentaje: calc.Spread{Deposito: 2},
+				}}},
+			"SOCIO_B": {Nombre: "SOCIO_B", MonedaBase: "USDT",
+				Monedas: map[string]calc.CurrencyConfig{"COP": {
+					Tipo: "D", PolarD: "-", Porcentaje: calc.Spread{Deposito: 10},
+				}}},
+		},
+	}
+	repo := &stubRepo{inTx: func(ctx context.Context, fn func(store.Tx) error) error {
+		return fn(tx)
+	}}
+	var input dto.UpdateInput
+	if err := json.Unmarshal([]byte(`{"socio_1":"SOCIO_B","moneda_recibo":"COP","monto":440000}`),
+		&input); err != nil {
+		t.Fatal(err)
+	}
+	liq, err := New(repo).Update(context.Background(), "HASH", input)
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if liq.Socio1 != "SOCIO_B" {
+		t.Fatalf("el socio editado debe persistirse: %+v", liq)
+	}
+	if liq.TipoOp1 != "D-COP" || liq.LoteTasa != "T052" {
+		t.Fatalf("el payload parcial no debe degradar tipo ni lote: %+v", liq)
+	}
+	// SOCIO_B aporta polar_D=- y 10% de comisión: 4000 * 1.10 = 4400.
+	if liq.Tasa1 != 4400 || liq.Monto1 != -100 || liq.ME1 != -100 {
+		t.Fatalf("recálculo con el contrato de SOCIO_B: %+v", liq)
+	}
+	if tx.liq.HashLargo != "HASH" || tx.liq.Socio1 != "SOCIO_B" {
+		t.Fatalf("upsert no recibió el recálculo: %+v", tx.liq)
 	}
 }
 

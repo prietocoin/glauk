@@ -1,10 +1,11 @@
 package domain
 
-// Liquidacion es el snapshot financiero congelado en comprobantes_liq.
+// Liquidacion es el snapshot financiero persistido en comprobantes_liq.
 //
-// Sus importes se guardan tal como se calcularon; futuras ediciones del
-// comprobante los reemplazan únicamente dentro de una transacción. El signo
-// forma parte del snapshot: no se recalcula al leerlo.
+// Cada edición del comprobante lo reemplaza dentro de una transacción con el
+// contrato vigente de los socios. La proyección de lectura vuelve a aplicar ese
+// contrato en vivo, de modo que un cambio de polaridad o comisión se refleje sin
+// migrar filas históricas.
 type Liquidacion struct {
 	HashLargo string  `json:"hash_largo"`
 	Socio1    string  `json:"socio_1"`

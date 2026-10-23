@@ -17,6 +17,7 @@ type Profile struct {
 
 // CurrencyConfig modela la configuración JSONB de una divisa.
 type CurrencyConfig struct {
+	Activo     bool   `json:"activo"`
 	Tipo       string `json:"tipo"`
 	PolarD     string `json:"polar_D"`
 	PolarP     string `json:"polar_P"`
