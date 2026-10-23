@@ -28,9 +28,13 @@ func imagePayload(sha any, instance string) []byte {
 		},
 		"message": map[string]any{
 			"imageMessage": map[string]any{
-				"caption":    "  pago   recibido ",
-				"mimetype":   "image/png",
-				"fileSha256": sha,
+				"caption":       "  pago   recibido ",
+				"mimetype":      "image/png",
+				"fileSha256":    sha,
+				"mediaKey":      "media-key-critica",
+				"directPath":    "/v/t62.7118-24/abc",
+				"url":           "https://mmg.whatsapp.net/v/t62.7118-24/abc",
+				"fileEncSha256": []int{9, 8, 7},
 			},
 		},
 		"pushName":         "Ana",
@@ -78,6 +82,36 @@ func TestParseEventV2(t *testing.T) {
 	}
 	if event.MimeType != "image/png" {
 		t.Fatalf("mime = %s", event.MimeType)
+	}
+}
+
+func TestParseEventPreservaMediaCruda(t *testing.T) {
+	event, err := ParseEvent(imagePayload(indexedSha(), "glauk"), "glauk")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var message struct {
+		ImageMessage struct {
+			MediaKey   string `json:"mediaKey"`
+			DirectPath string `json:"directPath"`
+			URL        string `json:"url"`
+		} `json:"imageMessage"`
+	}
+	if err := json.Unmarshal(event.Message, &message); err != nil {
+		t.Fatalf("message crudo: %v", err)
+	}
+	if message.ImageMessage.MediaKey != "media-key-critica" {
+		t.Fatalf("mediaKey perdida: %q", message.ImageMessage.MediaKey)
+	}
+	if message.ImageMessage.DirectPath == "" || message.ImageMessage.URL == "" {
+		t.Fatalf("message recortado: %+v", message.ImageMessage)
+	}
+	var key map[string]any
+	if err := json.Unmarshal(event.Key, &key); err != nil {
+		t.Fatalf("key cruda: %v", err)
+	}
+	if key["id"] != "ABC123" {
+		t.Fatalf("key recortada: %+v", key)
 	}
 }
 

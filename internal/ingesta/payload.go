@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 )
 
@@ -22,13 +21,15 @@ type envelope struct {
 }
 
 type messageData struct {
-	Key              keyData     `json:"key"`
-	Message          messageBody `json:"message"`
-	PushName         string      `json:"pushName"`
-	MessageTimestamp flexInt64   `json:"messageTimestamp"`
-	MessageType      string      `json:"messageType"`
-	Instance         string      `json:"instance"`
-	InstanceID       string      `json:"instanceId"`
+	// Key y Message se guardan crudos: Evolution necesita mediaKey, directPath,
+	// url, fileEncSha256 y demás campos que un struct tipado descartaría.
+	Key              json.RawMessage `json:"key"`
+	Message          json.RawMessage `json:"message"`
+	PushName         string          `json:"pushName"`
+	MessageTimestamp flexInt64       `json:"messageTimestamp"`
+	MessageType      string          `json:"messageType"`
+	Instance         string          `json:"instance"`
+	InstanceID       string          `json:"instanceId"`
 }
 
 type keyData struct {
@@ -60,33 +61,47 @@ func ParseEvent(raw []byte, defaultInstance string) (Event, error) {
 	if err := json.Unmarshal(data, &message); err != nil {
 		return Event{}, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
 	}
-	if message.Message.ImageMessage == nil && message.MessageType != "imageMessage" {
+
+	var key keyData
+	if len(message.Key) > 0 {
+		if err := json.Unmarshal(message.Key, &key); err != nil {
+			return Event{}, fmt.Errorf("%w: key inválida: %v", ErrInvalidPayload, err)
+		}
+	}
+	var body messageBody
+	if len(message.Message) > 0 {
+		if err := json.Unmarshal(message.Message, &body); err != nil {
+			return Event{}, fmt.Errorf("%w: message inválido: %v", ErrInvalidPayload, err)
+		}
+	}
+
+	if body.ImageMessage == nil && message.MessageType != "imageMessage" {
 		return Event{}, ErrNotImage
 	}
-	if message.Key.FromMe {
+	if key.FromMe {
 		return Event{}, ErrNotImage
 	}
 
-	hash := hashFromMessage(message)
+	hash := hashFromMessage(body, key)
 	if hash == "" {
 		return Event{}, fmt.Errorf("%w: no se pudo calcular el hash", ErrInvalidPayload)
 	}
 	caption := ""
-	if message.Message.ImageMessage != nil {
-		caption = message.Message.ImageMessage.Caption
+	if body.ImageMessage != nil {
+		caption = body.ImageMessage.Caption
 	}
 	return Event{
 		Instancia:  normalizeInstance(firstNonEmpty(instance, message.Instance, message.InstanceID, defaultInstance)),
 		HashLargo:  hash,
 		HashCorto:  shortHash(hash),
-		Usuario:    firstNonEmpty(message.Key.ParticipantAlt, message.Key.Participant, message.Key.RemoteJID),
-		Grupo:      message.Key.RemoteJID,
+		Usuario:    firstNonEmpty(key.ParticipantAlt, key.Participant, key.RemoteJID),
+		Grupo:      key.RemoteJID,
 		NombrePush: strings.TrimSpace(message.PushName),
 		Caption:    cleanCaption(caption),
 		Timestamp:  int64(message.MessageTimestamp),
-		Key:        mustRaw(message.Key),
-		Message:    mustRaw(message.Message),
-		MimeType:   mimeOf(message.Message.ImageMessage),
+		Key:        message.Key,
+		Message:    message.Message,
+		MimeType:   mimeOf(body.ImageMessage),
 	}, nil
 }
 
@@ -131,41 +146,6 @@ func firstObject(raw json.RawMessage) json.RawMessage {
 		}
 	}
 	return trimmed
-}
-
-// flexInt64 acepta segundos, milisegundos y cadenas numéricas.
-type flexInt64 int64
-
-func (f *flexInt64) UnmarshalJSON(data []byte) error {
-	value := strings.Trim(strings.TrimSpace(string(data)), `"`)
-	if value == "" || value == "null" {
-		*f = 0
-		return nil
-	}
-	number, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		float, floatErr := strconv.ParseFloat(value, 64)
-		if floatErr != nil {
-			return fmt.Errorf("timestamp inválido: %q", value)
-		}
-		number = int64(float)
-	}
-	switch {
-	case number > 1_000_000_000_000_000:
-		number /= 1_000_000
-	case number > 1_000_000_000_000:
-		number /= 1_000
-	}
-	*f = flexInt64(number)
-	return nil
-}
-
-func mustRaw(value any) json.RawMessage {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return json.RawMessage("{}")
-	}
-	return raw
 }
 
 func firstNonEmpty(values ...string) string {

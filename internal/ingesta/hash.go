@@ -13,13 +13,13 @@ import (
 // hashFromMessage replica la identidad del binomio de remitHub: el SHA-256 del
 // archivo que WhatsApp adjunta en fileSha256. Cuando la instancia no lo envía,
 // se usa el id del mensaje para no perder el evento.
-func hashFromMessage(message messageData) string {
-	if message.Message.ImageMessage != nil {
-		if hash := decodeFileSha(message.Message.ImageMessage.FileSha256); hash != "" {
+func hashFromMessage(body messageBody, key keyData) string {
+	if body.ImageMessage != nil {
+		if hash := decodeFileSha(body.ImageMessage.FileSha256); hash != "" {
 			return hash
 		}
 	}
-	id := strings.TrimSpace(message.Key.ID)
+	id := strings.TrimSpace(key.ID)
 	if id == "" {
 		return ""
 	}

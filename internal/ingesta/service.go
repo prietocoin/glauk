@@ -157,6 +157,8 @@ func (s *Service) obtenerImagen(ctx context.Context, job Job, instancia string) 
 	if len(job.Key) == 0 || len(job.Message) == 0 {
 		return nil, "", errors.New("ingesta: el job no tiene key/message de Evolution")
 	}
+	s.log.Info("ingesta: solicitando media a evolution",
+		"hash", job.HashLargo, "instancia", instancia)
 	data, mimeType, err := s.media.DownloadMedia(ctx, instancia, job.Key, job.Message)
 	if err != nil {
 		return nil, "", fmt.Errorf("ingesta: obtener imagen de Evolution: %w", err)
