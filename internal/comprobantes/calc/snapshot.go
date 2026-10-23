@@ -42,15 +42,7 @@ func CalcularSnapshotFinanciero(raw Raw, socio1, socio2 Profile, lote RateLot,
 	baseDivisa := SnapshotRate(tasas, divisa)
 	cfg1 := ResolveSocioConfig(socio1, divisa, fundda)
 	cfg2 := ResolveSocioConfig(socio2, divisa, fundda)
-	signo1 := NaturalSign(cfg1, tipoOp)
-	signo2 := NaturalSign(cfg2, tipoOp)
-	if cfg1.Active && cfg2.Active {
-		if cfg1.HereDa && !cfg2.HereDa {
-			signo1 = -signo2
-		} else if cfg2.HereDa && !cfg1.HereDa {
-			signo2 = -signo1
-		}
-	}
+	signo1, signo2 := SideSigns(cfg1, cfg2, tipoOp)
 	lado1 := CalculateSide(cfg1, signo1, tipoOp, montoRaw, baseDivisa, tasas)
 	lado2 := CalculateSide(cfg2, signo2, tipoOp, montoRaw, baseDivisa, tasas)
 	etiqueta := tipoOp + "-" + divisa

@@ -80,9 +80,23 @@ type SocioConfig struct {
 	Moneda string
 }
 
-// ResolveSocioConfig aplica GENERAL, herencia y defaults de polaridad.
+// ResolveSocioConfig aplica GENERAL, herencia y defaults de polaridad usando el
+// nombre y la moneda base del perfil.
 func ResolveSocioConfig(profile Profile, divisa string, fundda Profile) SocioConfig {
-	if IsGeneral(profile.Nombre) {
+	return resolveSocioConfig(profile.Nombre, profile, divisa, fundda, profile.MonedaBase)
+}
+
+// ResolveLiveSocioConfig resuelve un lado todavía no liquidado con el nombre y
+// la moneda que ya expone el listado. Ambos pueden venir del impacto cuando el
+// perfil aún no existe, por eso no se derivan solo del JSONB.
+func ResolveLiveSocioConfig(name string, profile Profile, divisa string,
+	fundda Profile, moneda string) SocioConfig {
+	return resolveSocioConfig(name, profile, divisa, fundda, moneda)
+}
+
+func resolveSocioConfig(name string, profile Profile, divisa string,
+	fundda Profile, moneda string) SocioConfig {
+	if IsGeneral(name) {
 		return SocioConfig{Moneda: "USDT"}
 	}
 	hereda := profile.Herencia
@@ -101,6 +115,6 @@ func ResolveSocioConfig(profile Profile, divisa string, fundda Profile) SocioCon
 		Active: true,
 		Conf:   conf,
 		HereDa: hereda,
-		Moneda: CurrencyOf(profile.MonedaBase),
+		Moneda: CurrencyOf(moneda),
 	}
 }

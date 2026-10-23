@@ -8,23 +8,35 @@ import (
 )
 
 // ProjectRow transforma una fila cruda en el contrato de auditoría.
+//
+// Si la fila está liquidada, los importes congelados mandan y no se vuelven a
+// firmar. Solo las filas live aplican la polaridad del contrato y el ancla de
+// herencia, con la misma función que usa el snapshot.
 func ProjectRow(row SourceRow, fundda Profile) domain.Comprobante {
 	monto := math.Abs(TruncateAmount(row.Monto))
 	liquidado := row.EstaLiquidado
 	socio1 := resolveSocio1(row, liquidado)
 	socio2 := resolveSocio2(row, liquidado)
+	socio2Nombre := ""
+	if socio2 != nil {
+		socio2Nombre = *socio2
+	}
 	divisa := domain.NormalizeCurrency(row.Moneda, "COP")
 	monedaSocio1 := domain.NormalizeCurrency(row.MonedaSocio1, "USDT")
 	monedaSocio2 := domain.NormalizeCurrency(row.MonedaSocio2, "USDT")
-	conf1 := EffectiveCurrency(DecodeProfile(row.Socio1Row), fundda, divisa)
-	conf2 := EffectiveCurrency(DecodeProfile(row.Socio2Row), fundda, divisa)
-	tipoLetra := operationLetter(row, conf1, socio1, monedaSocio1, divisa)
+	profile1 := DecodeProfile(row.Socio1Row)
+	profile2 := DecodeProfile(row.Socio2Row)
+	cfg1 := ResolveLiveSocioConfig(socio1, profile1, divisa, fundda, monedaSocio1)
+	cfg2 := ResolveLiveSocioConfig(socio2Nombre, profile2, divisa, fundda, monedaSocio2)
+	tipoLetra := operationLetter(row, cfg1.Conf, socio1, monedaSocio1, divisa)
 	tipoTag := tipoLetra + "-" + divisa
-	signo1 := SignFor(ResolvePolarity(conf1, tipoLetra, true))
-	signo2 := SignFor(ResolvePolarity(conf2, tipoLetra, false))
+	signo1, signo2 := 0, 0
+	if !liquidado {
+		signo1, signo2 = SideSigns(cfg1, cfg2, tipoLetra)
+	}
 	tasa1, monto1, me1, tasa2, monto2, me2 := CalculateAmounts(
-		row, liquidado, monto, divisa, monedaSocio1, monedaSocio2,
-		conf1, conf2, tipoLetra, signo1, signo2, socio2 != nil,
+		row, liquidado, monto, divisa,
+		cfg1, cfg2, tipoLetra, signo1, signo2, socio2 != nil,
 	)
 	return domain.Comprobante{
 		HashLargo: row.HashLargo, HashCorto: row.HashCorto,

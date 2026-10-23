@@ -88,8 +88,6 @@ func (l *LiquidadorAdapter) Liquidar(ctx context.Context,
 		fundda,
 	)
 
-	conf1 := calc.ResolveSocioConfig(perfil1, moneda, fundda)
-	conf2 := calc.ResolveSocioConfig(perfil2, moneda, fundda)
 	return LiquidacionResult{
 		Snapshot:    snapshot,
 		TipoManual:  tipo,
@@ -97,8 +95,8 @@ func (l *LiquidadorAdapter) Liquidar(ctx context.Context,
 		Rol2:        rolOf(perfil2),
 		MonedaBase1: baseOf(perfil1),
 		MonedaBase2: baseOf(perfil2),
-		Polaridad1:  calc.ResolvePolarity(conf1.Conf, tipo, true),
-		Polaridad2:  calc.ResolvePolarity(conf2.Conf, tipo, false),
+		Polaridad1:  calc.PolarityOf(snapshot.Monto1),
+		Polaridad2:  calc.PolarityOf(snapshot.Monto2),
 		Perfil1:     perfil1,
 		Perfil2:     perfil2,
 		Grupo1:      grupo1,

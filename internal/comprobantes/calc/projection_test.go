@@ -1,6 +1,7 @@
 package calc
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -20,11 +21,11 @@ func TestSignedDivisionYFrozenAmounts(t *testing.T) {
 		Monto1: testPtr(-120.5), ME1: testPtr(-60.25), Tasa1: testPtr(0),
 		Monto2: testPtr(40), ME2: testPtr(20), Tasa2: testPtr(4000),
 	}
-	t1, m1, me1, t2, m2, me2 := FrozenAmounts(row, -1, 1)
+	t1, m1, me1, t2, m2, me2 := FrozenAmounts(row)
 	if t1 != 1 || m1 != -120.5 || me1 != -60.25 || t2 != 4000 || m2 != 40 || me2 != 20 {
 		t.Fatalf("frozen = %v %v %v %v %v %v", t1, m1, me1, t2, m2, me2)
 	}
-	t1, m1, me1, t2, m2, me2 = FrozenAmounts(SourceRow{}, 1, -1)
+	t1, m1, me1, t2, m2, me2 = FrozenAmounts(SourceRow{})
 	if t1 != 1 || t2 != 1 || m1 != 0 || me1 != 0 || m2 != 0 || me2 != 0 {
 		t.Fatalf("frozen vacío = %v %v %v %v %v %v", t1, m1, me1, t2, m2, me2)
 	}
@@ -32,22 +33,24 @@ func TestSignedDivisionYFrozenAmounts(t *testing.T) {
 
 func TestCalculateAmountsLiveYCongelado(t *testing.T) {
 	row := SourceRow{TasasLote: []byte(`{"COP":4000,"USDT":1,"ARS":1000}`)}
-	conf1 := CurrencyConfig{Porcentaje: Spread{Deposito: 2, Pago: 3}}
-	conf2 := CurrencyConfig{Porcentaje: Spread{Deposito: 0, Pago: 3}}
+	cfg1 := SocioConfig{Active: true, Moneda: "USDT",
+		Conf: CurrencyConfig{Porcentaje: Spread{Deposito: 2, Pago: 3}}}
+	cfg2 := SocioConfig{Active: true, Moneda: "ARS",
+		Conf: CurrencyConfig{Porcentaje: Spread{Deposito: 0, Pago: 3}}}
 	t1, m1, me1, t2, m2, me2 := CalculateAmounts(
-		row, false, 400000, "COP", "USDT", "ARS", conf1, conf2, "D", 1, -1, true)
+		row, false, 400000, "COP", cfg1, cfg2, "D", 1, -1, true)
 	if t1 != 4080 || t2 != 4 || m1 != 400000.0/4080 || me1 != 400000.0/4080 ||
 		m2 != -100000 || me2 != -100 {
 		t.Fatalf("live = %v %v %v %v %v %v", t1, m1, me1, t2, m2, me2)
 	}
 	_, _, _, t2, m2, me2 = CalculateAmounts(
-		row, false, 400000, "COP", "USDT", "ARS", conf1, conf2, "D", 1, -1, false)
-	if t2 != 4 || m2 != 0 || me2 != 0 {
+		row, false, 400000, "COP", cfg1, cfg2, "D", 1, -1, false)
+	if t2 != 1 || m2 != 0 || me2 != 0 {
 		t.Fatalf("sin socio2 = %v %v %v", t2, m2, me2)
 	}
 	frozen := SourceRow{Monto1: testPtr(10), ME1: testPtr(5), Tasa1: testPtr(4000)}
 	t1, m1, me1, _, m2, me2 = CalculateAmounts(
-		frozen, true, 999, "COP", "USDT", "USDT", conf1, conf2, "D", 1, -1, false)
+		frozen, true, 999, "COP", cfg1, cfg2, "D", 1, -1, false)
 	if t1 != 4000 || m1 != 10 || me1 != 5 || m2 != 0 || me2 != 0 {
 		t.Fatalf("congelado = %v %v %v %v %v", t1, m1, me1, m2, me2)
 	}
@@ -55,12 +58,12 @@ func TestCalculateAmountsLiveYCongelado(t *testing.T) {
 
 func TestProjectRowLive(t *testing.T) {
 	socio1 := []byte(`{"nombre":"FUNDA","rol":"SOCIO","moneda_base":"USDT",` +
-		`"monedas":{"COP":{"tipo":"D","polar_D":"+","polar_P":"-",` +
+		`"monedas":{"COP":{"tipo":"D","polaridad":"+",` +
 		`"porcentaje":{"deposito":"2","pago":"3"}}}}`)
 	socio2 := []byte(`{"nombre":"SOCIO2","moneda_base":"ARS",` +
-		`"monedas":{"COP":{"tipo":"P","polar_D":"-","polar_P":"+"}}}`)
+		`"monedas":{"COP":{"tipo":"P","polaridad":"-"}}}`)
 	fundda := Profile{Nombre: "FUNDDA", Monedas: map[string]CurrencyConfig{
-		"COP": {Tipo: "D", PolarD: "+", PolarP: "-"},
+		"COP": {Tipo: "D", Polaridad: "+"},
 	}}
 	row := SourceRow{
 		HashLargo: "h1", HashCorto: "c1", FechaHora: time.Unix(10, 0),
@@ -98,9 +101,35 @@ func TestProjectRowLiquidado(t *testing.T) {
 	if got.NombreSocio1 != "FUNDA" || got.NombreSocio2 != nil || got.TipoOp1 != "P-COP" {
 		t.Fatalf("cabecera = %+v", got)
 	}
-	if got.Monto != 100 || got.Tasa1 != 4000 || got.Monto1 != -100 || got.ME1 != -100 ||
+	if got.Monto != 100 || got.Tasa1 != 4000 || got.Monto1 != 100 || got.ME1 != 100 ||
 		got.Tasa2 != 1 || got.Monto2 != -50 || got.ME2 != -50 || got.LoteTasaAsignado != "T049" {
 		t.Fatalf("congelado = %+v", got)
+	}
+}
+
+// TestProjectRowCongeladoIgnoraPerfil verifica que una fila liquidada conserva
+// los signos persistidos aunque el perfil actual los contradiga.
+func TestProjectRowCongeladoIgnoraPerfil(t *testing.T) {
+	perfil1 := []byte(`{"nombre":"FUNDA","rol":"SOCIO","moneda_base":"USDT",` +
+		`"herencia":true,"monedas":{"COP":{"tipo":"P","polaridad":"-"}}}`)
+	perfil2 := []byte(`{"nombre":"FUNDDA","rol":"ADMIN","moneda_base":"USDT",` +
+		`"monedas":{"COP":{"tipo":"D","polaridad":"+"}}}`)
+	row := SourceRow{
+		HashLargo: "h3", Monto: 100, Moneda: "COP", EstaLiquidado: true,
+		Socio1: socioPtr("FUNDA"), Socio2: socioPtr("FUNDDA"),
+		TipoOp1: socioPtr("D-COP"), TipoOp2: socioPtr("D-COP"),
+		Monto1: testPtr(-14.20), Tasa1: testPtr(4080), ME1: testPtr(-14.20),
+		Monto2: testPtr(14.45), Tasa2: testPtr(4000), ME2: testPtr(14.45),
+		LoteTasa:  socioPtr("T052"),
+		Socio1Row: perfil1, Socio2Row: perfil2,
+	}
+	got := ProjectRow(row, Profile{})
+	if got.Monto1 != -14.20 || got.ME1 != -14.20 ||
+		got.Monto2 != 14.45 || got.ME2 != 14.45 {
+		t.Fatalf("el congelado no debe re-firmarse: %+v", got)
+	}
+	if got.M1Socio != got.Monto1 || got.M2Socio != got.Monto2 {
+		t.Fatalf("m_socio debe seguir al congelado: %+v", got)
 	}
 }
 
@@ -133,5 +162,51 @@ func TestProjectionHelpers(t *testing.T) {
 	}
 	if domain.NormalizeCurrency(" usdt ", "") != "USDT" {
 		t.Fatal("normalización de divisa")
+	}
+}
+
+func profileJSON(t *testing.T, profile Profile) []byte {
+	t.Helper()
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("json de perfil: %v", err)
+	}
+	return raw
+}
+
+// TestProjectRowLiveParidadConSnapshot exige que la vista previa de una fila no
+// liquidada use la misma polaridad y el mismo ancla que el snapshot congelado.
+func TestProjectRowLiveParidadConSnapshot(t *testing.T) {
+	fundda := Profile{Nombre: "FUNDDA", MonedaBase: "USDT",
+		Monedas: map[string]CurrencyConfig{
+			"COP": {Tipo: "D", Polaridad: "+", Porcentaje: Spread{Deposito: 2, Pago: 3}},
+		}}
+	socio1 := Profile{Nombre: "SOCIO_HEREDA", MonedaBase: "USDT", Herencia: true,
+		Monedas: map[string]CurrencyConfig{"COP": {Polaridad: "-"}}}
+	socio2 := Profile{Nombre: "SOCIO_ANCLA", MonedaBase: "USDT",
+		Monedas: map[string]CurrencyConfig{"COP": {Polaridad: "+"}}}
+	lote := RateLot{IDTasa: "T052", Tasas: map[string]float64{"COP": 1000, "USDT": 1}}
+	want := CalcularSnapshotFinanciero(
+		Raw{HashLargo: "h4", Monto: 1000000, Moneda: "COP", TipoManual: "D", IDTasa: "T052"},
+		socio1, socio2, lote, fundda,
+	)
+
+	row := SourceRow{
+		HashLargo: "h4", Monto: 1000000, Moneda: "COP",
+		FBSocio1: "SOCIO_HEREDA", FBSocio2: socioPtr("SOCIO_ANCLA"),
+		RolSocio1: "SOCIO", MonedaSocio1: "USDT", MonedaSocio2: "USDT",
+		TasasLote: []byte(`{"COP":1000,"USDT":1}`),
+		Socio1Row: profileJSON(t, socio1), Socio2Row: profileJSON(t, socio2),
+	}
+	got := ProjectRow(row, fundda)
+	if TruncateAmount(got.Monto1) != want.Monto1 || TruncateAmount(got.ME1) != want.ME1 ||
+		TruncateAmount(got.Monto2) != want.Monto2 || TruncateAmount(got.ME2) != want.ME2 {
+		t.Fatalf("live != snapshot: got=%+v want=%+v", got, want)
+	}
+	if got.Tasa1 != want.Tasa1 || got.Tasa2 != want.Tasa2 {
+		t.Fatalf("tasas live != snapshot: got=%+v want=%+v", got, want)
+	}
+	if got.Monto1 >= 0 || got.Monto2 <= 0 {
+		t.Fatalf("el ancla de herencia debe oponer los signos: %+v", got)
 	}
 }

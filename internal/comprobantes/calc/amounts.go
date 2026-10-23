@@ -43,45 +43,47 @@ func SignedDivision(signo int, monto, tasa float64) float64 {
 }
 
 // CalculateAmounts proyecta una fila live o devuelve el snapshot congelado.
-func CalculateAmounts(row SourceRow, liquidado bool, monto float64,
-	divisa, monedaSocio1, monedaSocio2 string,
-	conf1, conf2 CurrencyConfig, tipoLetra string,
+//
+// Los signos solo se usan para la rama live. Si la fila ya está liquidada, el
+// snapshot persistido es la fuente de verdad y se devuelve sin recalcular.
+func CalculateAmounts(row SourceRow, liquidado bool, monto float64, divisa string,
+	cfg1, cfg2 SocioConfig, tipoLetra string,
 	signo1, signo2 int, hasSocio2 bool) (float64, float64, float64, float64, float64, float64) {
 	if liquidado {
-		return FrozenAmounts(row, signo1, signo2)
+		return FrozenAmounts(row)
 	}
 	tasas := DecodeRates(row.TasasLote)
 	tasaBaseDivisa := RateOr(tasas, divisa)
-	tasaBase1 := RateOr(tasas, monedaSocio1)
-	tasaBase2 := RateOr(tasas, monedaSocio2)
+	tasaBase1 := RateOr(tasas, cfg1.Moneda)
+	tasaBase2 := RateOr(tasas, cfg2.Moneda)
 	tasa1 := TruncateCommercialRate((tasaBaseDivisa / domain.PositiveOrOne(tasaBase1)) *
-		SpreadFactor(conf1, tipoLetra))
+		SpreadFactor(cfg1.Conf, tipoLetra))
 	tasa2 := TruncateCommercialRate((tasaBaseDivisa / domain.PositiveOrOne(tasaBase2)) *
-		SpreadFactor(conf2, tipoLetra))
-	monto1 := SignedDivision(signo1, monto, tasa1)
-	me1 := monto1 / domain.PositiveOrOne(tasaBase1)
+		SpreadFactor(cfg2.Conf, tipoLetra))
+	var monto1, me1 float64
+	if cfg1.Active {
+		monto1 = SignedDivision(signo1, monto, tasa1)
+		me1 = monto1 / domain.PositiveOrOne(tasaBase1)
+	} else {
+		tasa1 = 1
+	}
 	if !hasSocio2 {
-		return tasa1, monto1, me1, tasa2, 0, 0
+		return tasa1, monto1, me1, 1, 0, 0
 	}
-	monto2 := SignedDivision(signo2, monto, tasa2)
-	me2 := monto2 / domain.PositiveOrOne(tasaBase2)
+	var monto2, me2 float64
+	if cfg2.Active {
+		monto2 = SignedDivision(signo2, monto, tasa2)
+		me2 = monto2 / domain.PositiveOrOne(tasaBase2)
+	} else {
+		tasa2 = 1
+	}
 	return tasa1, monto1, me1, tasa2, monto2, me2
 }
 
-// FrozenAmounts reaplica polaridad a las magnitudes ya congeladas.
-func FrozenAmounts(row SourceRow, signo1, signo2 int) (float64, float64, float64, float64, float64, float64) {
-	tasa1 := TasaOrOne(row.Tasa1)
-	tasa2 := TasaOrOne(row.Tasa2)
-	monto1 := float64(signo1) * absValue(ValueOr(row.Monto1, 0))
-	me1 := float64(signo1) * absValue(ValueOr(row.ME1, 0))
-	monto2 := float64(signo2) * absValue(ValueOr(row.Monto2, 0))
-	me2 := float64(signo2) * absValue(ValueOr(row.ME2, 0))
-	return tasa1, monto1, me1, tasa2, monto2, me2
-}
-
-func absValue(value float64) float64 {
-	if value < 0 {
-		return -value
-	}
-	return value
+// FrozenAmounts devuelve los importes congelados tal como los persistió el
+// snapshot. El signo almacenado manda: no se aplica valor absoluto ni se
+// re-firma con el perfil actual.
+func FrozenAmounts(row SourceRow) (float64, float64, float64, float64, float64, float64) {
+	return TasaOrOne(row.Tasa1), ValueOr(row.Monto1, 0), ValueOr(row.ME1, 0),
+		TasaOrOne(row.Tasa2), ValueOr(row.Monto2, 0), ValueOr(row.ME2, 0)
 }

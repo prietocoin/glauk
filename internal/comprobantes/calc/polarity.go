@@ -33,27 +33,37 @@ func OperationNature(value string) string {
 	return normalized[:1]
 }
 
-// ResolvePolarity elige polar_D, polar_P o la regla especial de abono.
-func ResolvePolarity(conf CurrencyConfig, tipoLetra string, esSocio1 bool) string {
-	switch tipoLetra {
-	case "A":
-		if esSocio1 {
-			return "+"
-		}
-		return "-"
-	case "P":
-		return domain.FirstNonEmpty(conf.PolarP, "-")
-	default:
-		return domain.FirstNonEmpty(conf.PolarD, "+")
+// SideSigns resuelve el signo de cada lado con la polaridad natural del
+// contrato, la regla de abono y el ancla de herencia. Es la única fuente de
+// verdad tanto para el snapshot congelado como para la proyección live.
+//
+// Si exactamente un lado hereda de FUNDDA, su signo se invierte para quedar
+// opuesto al lado no heredante. Si ambos heredan, no hay override.
+func SideSigns(cfg1, cfg2 SocioConfig, tipoOp string) (int, int) {
+	signo1 := NaturalSign(cfg1, tipoOp)
+	signo2 := NaturalSign(cfg2, tipoOp)
+	if tipoOp == "A" {
+		// El abono es contrapartida: socio 1 suma, socio 2 resta.
+		signo1, signo2 = 1, -1
 	}
+	if cfg1.Active && cfg2.Active {
+		if cfg1.HereDa && !cfg2.HereDa {
+			signo1 = -signo2
+		} else if cfg2.HereDa && !cfg1.HereDa {
+			signo2 = -signo1
+		}
+	}
+	return signo1, signo2
 }
 
-// SignFor traduce la polaridad textual al signo numérico.
-func SignFor(polaridad string) int {
-	if strings.TrimSpace(polaridad) == "-" {
-		return -1
+// PolarityOf traduce el signo de un importe congelado a polaridad textual.
+// La polaridad persistida debe derivarse del importe, nunca de una regla
+// paralela que pueda contradecirlo.
+func PolarityOf(value float64) string {
+	if value < 0 {
+		return "-"
 	}
-	return 1
+	return "+"
 }
 
 // IsGeneral identifica la entidad matriz o un nombre vacío.

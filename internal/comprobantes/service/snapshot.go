@@ -45,11 +45,18 @@ func (s *Service) buildSnapshot(ctx context.Context, tx store.Tx, hash string,
 
 	etiqueta := calc.OperationNature(tipo) + "-" + moneda
 	liq.TipoOp1, liq.TipoOp2 = etiqueta, etiqueta
+	tasas := calc.MergeRates(lote.Tasas)
+	base1 := calc.SnapshotRate(tasas, calc.CurrencyOf(socio1.MonedaBase))
+	base2 := calc.SnapshotRate(tasas, calc.CurrencyOf(socio2.MonedaBase))
 	if value, ok := input.Monto1Valor(); ok {
+		// El override manual cambia el nominal; el ME debe seguirlo con la
+		// misma tasa base que usó el snapshot para no quedar incoherente.
 		liq.Monto1 = value
+		liq.ME1 = calc.TruncateAmount(value / base1)
 	}
 	if value, ok := input.Monto2Valor(); ok {
 		liq.Monto2 = value
+		liq.ME2 = calc.TruncateAmount(value / base2)
 	}
 	return liq, nil
 }
