@@ -23,7 +23,7 @@ services:
       DATABASE_URL: "postgres://${POSTGRES_USER:-glauk}:${POSTGRES_PASSWORD:-glauk}@postgres:5432/${POSTGRES_DB:-glauk}?sslmode=disable"
       EVOLUTION_API_URL: ""
       EVOLUTION_INSTANCE: Glauk
-      CORS_ALLOWED_ORIGINS: "https://automat-glauk-ui.fyi6ur.easypanel.host,http://localhost:*"
+      CORS_ALLOWED_ORIGINS: "https://glauk.jairokov.com,https://automat-glauk-ui.fyi6ur.easypanel.host,http://localhost:3000,http://localhost:5173"
     networks:
       - edge
       - db

@@ -187,7 +187,12 @@ func TestDefaultCORSOrigins(t *testing.T) {
 	if len(errs) > 0 {
 		t.Fatalf("errores inesperados: %v", errs)
 	}
-	want := []string{"https://automat-glauk-ui.fyi6ur.easypanel.host", "http://localhost:*"}
+	want := []string{
+		"https://glauk.jairokov.com",
+		"https://automat-glauk-ui.fyi6ur.easypanel.host",
+		"http://localhost:3000",
+		"http://localhost:5173",
+	}
 	if len(cfg.HTTP.AllowedOrigins) != len(want) {
 		t.Fatalf("CORS = %#v", cfg.HTTP.AllowedOrigins)
 	}

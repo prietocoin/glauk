@@ -14,7 +14,10 @@ import (
 	"glauk/internal/platform/config"
 )
 
-const glaukUIOrigin = "https://automat-glauk-ui.fyi6ur.easypanel.host"
+const (
+	glaukUIOrigin       = "https://automat-glauk-ui.fyi6ur.easypanel.host"
+	glaukJairokovOrigin = "https://glauk.jairokov.com"
+)
 
 func corsTestApp(t *testing.T) *fiber.App {
 	t.Helper()
@@ -26,7 +29,7 @@ func corsTestApp(t *testing.T) *fiber.App {
 			ReadTimeout:    time.Second,
 			WriteTimeout:   time.Second,
 			IdleTimeout:    time.Second,
-			AllowedOrigins: []string{glaukUIOrigin, "http://localhost:*"},
+			AllowedOrigins: []string{glaukJairokovOrigin, glaukUIOrigin, "http://localhost:*"},
 		},
 	}
 	app := NewApp(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -79,10 +82,17 @@ func TestCORSPreflightAllowsGlaukUI(t *testing.T) {
 		}
 	}
 	headers := resp.Header.Get("Access-Control-Allow-Headers")
-	for _, header := range []string{"Content-Type", "Authorization", "X-Requested-With"} {
+	for _, header := range []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Tenant-ID", "X-Requested-With"} {
 		if !strings.Contains(headers, header) {
 			t.Fatalf("allow-headers no incluye %s: %q", header, headers)
 		}
+	}
+}
+
+func TestCORSPreflightAllowsGlaukJairokov(t *testing.T) {
+	resp := corsRequest(t, corsTestApp(t), http.MethodOptions, glaukJairokovOrigin)
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != glaukJairokovOrigin {
+		t.Fatalf("allow-origin = %q", got)
 	}
 }
 

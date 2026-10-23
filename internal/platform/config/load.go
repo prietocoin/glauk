@@ -54,7 +54,12 @@ func build(l lookupFunc, appEnv string) (*Config, Errors) {
 			WriteTimeout: 90 * time.Second,
 			IdleTimeout:  60 * time.Second,
 			AllowedOrigins: envCSV(l, "CORS_ALLOWED_ORIGINS",
-				[]string{"https://automat-glauk-ui.fyi6ur.easypanel.host", "http://localhost:*"}),
+				[]string{
+					"https://glauk.jairokov.com",
+					"https://automat-glauk-ui.fyi6ur.easypanel.host",
+					"http://localhost:3000",
+					"http://localhost:5173",
+				}),
 			SecurityAPIKey: envString(l, "SECURITY_API_KEY", ""),
 		},
 		Report: ReportConfig{

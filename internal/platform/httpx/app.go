@@ -51,9 +51,9 @@ func corsConfig(cfg *config.Config) cors.Config {
 			return originAllowed(origin, allowed)
 		},
 		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		// Authorization y X-Requested-With son el contrato de glauk-ui;
-		// las demas cabeceras conservan la compatibilidad de los paneles previos.
-		AllowHeaders:  "Content-Type,Authorization,X-Requested-With,Accept,X-Request-Id,Idempotency-Key,X-Admin-Key,X-API-Key",
+		// Authorization y X-Tenant-ID son el contrato de glauk-ui; las demas
+		// cabeceras conservan la compatibilidad de los paneles previos.
+		AllowHeaders:  "Origin,Content-Type,Accept,Authorization,X-Tenant-ID,X-Requested-With,X-Request-Id,Idempotency-Key,X-Admin-Key,X-API-Key",
 		ExposeHeaders: "X-Request-Id,X-Total-Count,X-Limit,X-Offset,X-Has-More",
 		MaxAge:        600,
 	}
