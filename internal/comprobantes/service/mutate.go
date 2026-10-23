@@ -51,6 +51,8 @@ func (s *Service) Update(ctx context.Context, hash string, input dto.UpdateInput
 }
 
 // Delete borra la fila base y marca impactos_raw dentro de la misma transacción.
+// El store aplica el orden canónico raw -> liq -> impactos; no se debe invertir
+// desde el servicio para no reintroducir el deadlock de DB-19.
 func (s *Service) Delete(ctx context.Context, hash string) error {
 	target := strings.TrimSpace(hash)
 	if target == "" {

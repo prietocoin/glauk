@@ -49,18 +49,27 @@ func (t *txStore) UpsertLiquidacion(ctx context.Context, liq domain.Liquidacion)
 }
 
 func upsertLiquidacion(ctx context.Context, q sqlExecutor, liq domain.Liquidacion) error {
-	_, err := q.Exec(ctx, upsertLiquidacionSQL,
+	tag, err := q.Exec(ctx, upsertLiquidacionSQL,
 		liq.HashLargo, liq.Socio1, liq.TipoOp1, liq.Monto1, liq.Tasa1, liq.ME1,
 		liq.Socio2, liq.TipoOp2, liq.Monto2, liq.Tasa2, liq.ME2, liq.LoteTasa,
 	)
 	if err != nil {
 		return fmt.Errorf("guardar liquidación: %w", err)
 	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrComprobanteNotFound
+	}
 	return nil
 }
 
-// DeleteComprobante borra la liquidación, marca impactos y borra la fila base.
+// DeleteComprobante fija el orden canónico de locks de Comprobantes:
+// comprobantes_raw -> comprobantes_liq -> impactos_raw. El bloqueo de la fila
+// base debe ocurrir primero para que un Update concurrente no tome el lock de
+// la liquidación y luego espere el de la fila base (deadlock DB-19).
 func (t *txStore) DeleteComprobante(ctx context.Context, hash string) error {
+	if _, err := t.LockComprobante(ctx, hash); err != nil {
+		return err
+	}
 	if _, err := t.tx.Exec(ctx, deleteLiquidacionSQL, hash); err != nil {
 		return fmt.Errorf("eliminar liquidación: %w", err)
 	}

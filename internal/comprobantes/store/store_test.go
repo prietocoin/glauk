@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -23,6 +24,9 @@ func newMock(t *testing.T) pgxmock.PgxPoolIface {
 func TestDeleteMarksImpactosInSameTransaction(t *testing.T) {
 	mock := newMock(t)
 	mock.ExpectBeginTx(pgx.TxOptions{})
+	mock.ExpectQuery(lockComprobanteSQL).WithArgs("HASH").
+		WillReturnRows(pgxmock.NewRows([]string{"monto", "moneda", "banco", "referencia", "titular"}).
+			AddRow(float64(0), nil, nil, nil, nil))
 	mock.ExpectExec(deleteLiquidacionSQL).WithArgs("HASH").
 		WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	mock.ExpectExec(markImpactosSQL).WithArgs("HASH").
@@ -47,6 +51,9 @@ func TestDeleteMarksImpactosInSameTransaction(t *testing.T) {
 func TestDeleteRollsBackWhenMarkImpactosFails(t *testing.T) {
 	mock := newMock(t)
 	mock.ExpectBeginTx(pgx.TxOptions{})
+	mock.ExpectQuery(lockComprobanteSQL).WithArgs("HASH").
+		WillReturnRows(pgxmock.NewRows([]string{"monto", "moneda", "banco", "referencia", "titular"}).
+			AddRow(float64(0), nil, nil, nil, nil))
 	mock.ExpectExec(deleteLiquidacionSQL).WithArgs("HASH").
 		WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	mock.ExpectExec(markImpactosSQL).WithArgs("HASH").
@@ -81,6 +88,23 @@ func TestUpsertLiquidacionPreservesFrozenValues(t *testing.T) {
 
 	if err := New(mock).Liquidar(context.Background(), liq); err != nil {
 		t.Fatalf("Liquidar: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectativas: %v", err)
+	}
+}
+
+func TestUpsertLiquidacionReturnsNotFoundWhenRawMissing(t *testing.T) {
+	mock := newMock(t)
+	liq := domain.Liquidacion{HashLargo: "HUERFANO", Socio1: "SOCIO_A", LoteTasa: "T052"}
+	mock.ExpectExec(upsertLiquidacionSQL).WithArgs(
+		"HUERFANO", "SOCIO_A", "", 0.0, 0.0, 0.0,
+		(*string)(nil), "", 0.0, 0.0, 0.0, "T052",
+	).WillReturnResult(pgxmock.NewResult("INSERT", 0))
+
+	err := New(mock).Liquidar(context.Background(), liq)
+	if !errors.Is(err, domain.ErrComprobanteNotFound) {
+		t.Fatalf("error = %v, esperado ErrComprobanteNotFound", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectativas: %v", err)

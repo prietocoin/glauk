@@ -5,7 +5,9 @@ INSERT INTO comprobantes_liq (
     hash_largo, socio_1, tipo_op1, monto_1, tasa_1, me1,
     socio_2, tipo_op2, monto_2, tasa_2, me2, lote_tasa, actualizado_en
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+SELECT c.hash_largo, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()
+FROM comprobantes_raw c
+WHERE lower(btrim(c.hash_largo)) = lower(btrim($1::text))
 ON CONFLICT (hash_largo) DO UPDATE SET
     socio_1 = EXCLUDED.socio_1, tipo_op1 = EXCLUDED.tipo_op1,
     monto_1 = EXCLUDED.monto_1, tasa_1 = EXCLUDED.tasa_1, me1 = EXCLUDED.me1,

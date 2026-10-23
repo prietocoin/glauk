@@ -7,6 +7,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -39,7 +40,10 @@ func New(db DB) *Repository {
 // ListRows ejecuta la consulta de auditoría y devuelve una página de filas
 // crudas junto con el total del universo filtrado.
 func (r *Repository) ListRows(ctx context.Context, filters domain.ListFilters) ([]calc.SourceRow, int, error) {
-	query := ListSQL + orderClause(filters.OrderAsc(), filters.Limit, filters.Offset)
+	query := strings.ReplaceAll(ListSQL, "{{PAGE_ORDER}}",
+		orderClause(filters.OrderAsc(), filters.Limit, filters.Offset))
+	query = strings.ReplaceAll(query, "{{OUTER_ORDER}}",
+		outerOrderClause(filters.OrderAsc()))
 	rows, err := r.db.Query(ctx, query,
 		filters.Socio, filters.Rol, filters.FechaInicio, filters.FechaFin, filters.Hash,
 	)
