@@ -49,7 +49,8 @@ func (r *Repository) ImagenExistente(ctx context.Context, hash string) (string, 
 		return "", nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("ingesta: leer imagen existente: %w", err)
+		return "", r.sqlFail("select_imagen_existente",
+			fmt.Errorf("ingesta: leer imagen existente: %w", err))
 	}
 	return url, nil
 }
@@ -58,9 +59,12 @@ func (r *Repository) ImagenExistente(ctx context.Context, hash string) (string, 
 // forma best-effort, al registro que lee el panel.
 func (r *Repository) ActualizarImagen(ctx context.Context, hash, url string) error {
 	if _, err := r.db.Exec(ctx, actualizarImagenSQL, hash, url); err != nil {
-		return fmt.Errorf("ingesta: actualizar imagen: %w", err)
+		return r.sqlFail("update_impactos_raw_imagen",
+			fmt.Errorf("ingesta: actualizar imagen: %w", err))
 	}
-	_, _ = r.db.Exec(ctx, actualizarRegistroImagenSQL, hash, url)
+	if _, err := r.db.Exec(ctx, actualizarRegistroImagenSQL, hash, url); err != nil {
+		_ = r.sqlFail("update_registros_raw_imagen", err)
+	}
 	return nil
 }
 
@@ -74,12 +78,14 @@ func (r *Repository) Contexto(ctx context.Context, hash string) (Contexto, error
 		&result.Titular, &result.Referencia, &result.Procesado,
 	)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return Contexto{}, fmt.Errorf("ingesta: leer comprobante: %w", err)
+		return Contexto{}, r.sqlFail("select_comprobantes_raw_contexto",
+			fmt.Errorf("ingesta: leer comprobante: %w", err))
 	}
 
 	rows, err := r.db.Query(ctx, contextoImpactosSQL, hash)
 	if err != nil {
-		return Contexto{}, fmt.Errorf("ingesta: leer impactos: %w", err)
+		return Contexto{}, r.sqlFail("select_impactos_raw_contexto",
+			fmt.Errorf("ingesta: leer impactos: %w", err))
 	}
 	defer rows.Close()
 
@@ -87,7 +93,8 @@ func (r *Repository) Contexto(ctx context.Context, hash string) (Contexto, error
 		var grupo, caption, url string
 		var timestamp int64
 		if err := rows.Scan(&grupo, &caption, &timestamp, &url); err != nil {
-			return Contexto{}, fmt.Errorf("ingesta: escanear impacto: %w", err)
+			return Contexto{}, r.sqlFail("scan_impactos_raw_contexto",
+				fmt.Errorf("ingesta: escanear impacto: %w", err))
 		}
 		if result.Caption == "" && caption != "" {
 			result.Caption = caption
@@ -103,7 +110,8 @@ func (r *Repository) Contexto(ctx context.Context, hash string) (Contexto, error
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return Contexto{}, fmt.Errorf("ingesta: recorrer impactos: %w", err)
+		return Contexto{}, r.sqlFail("rows_impactos_raw_contexto",
+			fmt.Errorf("ingesta: recorrer impactos: %w", err))
 	}
 	return result, nil
 }

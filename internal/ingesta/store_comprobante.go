@@ -34,7 +34,8 @@ func (r *Repository) GuardarExtraccion(ctx context.Context, hash, instancia,
 	if _, err := r.db.Exec(ctx, upsertExtraccionSQL,
 		hash, extraccion.Monto, extraccion.Moneda, extraccion.Banco,
 		extraccion.Referencia, extraccion.Titular, url, instancia); err != nil {
-		return fmt.Errorf("ingesta: guardar extracción: %w", err)
+		return r.sqlFail("upsert_comprobantes_raw",
+			fmt.Errorf("ingesta: guardar extracción: %w", err))
 	}
 	return nil
 }

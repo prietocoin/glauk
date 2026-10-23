@@ -31,7 +31,7 @@ func NewModule(cfg *config.Config, pool *pgxpool.Pool, evo *evolution.Client,
 	if cfg == nil || pool == nil {
 		return nil
 	}
-	repository := NewRepository(pool)
+	repository := NewRepository(pool, log)
 	images := r2.New(cfg.Ingesta.R2)
 	extractor := gemini.New(cfg.Ingesta.Gemini)
 	liquidador := NewLiquidador(pool)

@@ -127,7 +127,7 @@ func TestRecibirWaitingPair(t *testing.T) {
 }
 
 func TestRecibirQueuesCompletePair(t *testing.T) {
-	store := &fakeStore{registro: Registro{Conteo: 2}, claim: true}
+	store := &fakeStore{registro: Registro{Conteo: 2, Completo: true}, claim: true}
 	service := testService(store, fakeMedia{}, &fakeImages{}, &fakeAI{}, &fakeLiq{})
 	decision, job, err := service.Recibir(context.Background(), imagePayload(indexedSha(), "glauk"))
 	if err != nil {

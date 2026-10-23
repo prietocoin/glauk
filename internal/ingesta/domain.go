@@ -50,10 +50,12 @@ type Decision struct {
 	Conteo int
 }
 
-// Registro refleja el estado acumulado de registros_raw.
+// Registro refleja el estado acumulado de registros_raw. Completo indica que
+// esta llamada cerró el binomio (impacto 2), no que el pipeline terminó.
 type Registro struct {
-	Conteo int
-	Estado Estado
+	Conteo   int
+	Estado   Estado
+	Completo bool
 }
 
 // Contexto reúne lo que el worker necesita de PostgreSQL antes de llamar a

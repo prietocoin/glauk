@@ -63,6 +63,9 @@ func (s *Service) Recibir(ctx context.Context, raw []byte) (Decision, *Job, erro
 			Status: "waiting_pair", Hash: event.HashLargo, Conteo: registro.Conteo,
 		}, nil, nil
 	}
+	if !registro.Completo && registro.Estado != EstadoFallo {
+		return Decision{Status: "duplicate", Hash: event.HashLargo, Conteo: registro.Conteo}, nil, nil
+	}
 
 	claimed, err := s.store.Claim(ctx, event.HashLargo)
 	if err != nil {

@@ -2,85 +2,132 @@ package ingesta
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
 )
 
-// La identidad del impacto añade usuario, grupo y timestamp para que un
-// reintento del webhook no cuente dos veces el mismo binomio.
+// insertImpactoSeguroSQL solo usa columnas que existen en impactos_raw. La
+// identidad incluye usuario, grupo y timestamp para que un reintento del
+// webhook no cuente dos veces el mismo impacto.
 const insertImpactoSeguroSQL = `
 INSERT INTO impactos_raw (
     hash_largo, hash_corto, instancia, usuario_raw, grupo_raw,
-    nombre_push, caption, timestamp_msg
+    nombre_push, caption, timestamp_msg, estado, created_at
 )
-SELECT $1, $2, $3, $4, $5, $6, $7, $8
+SELECT $1, $2, $3, $4, $5, $6, $7, $8, 'RECIBIDO', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (
     SELECT 1 FROM impactos_raw
     WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))
       AND COALESCE(usuario_raw, '') = COALESCE($4, '')
       AND COALESCE(grupo_raw, '') = COALESCE($5, '')
       AND COALESCE(timestamp_msg, 0) = COALESCE($8, 0)
+      AND eliminado_en IS NULL
 )`
 
-const upsertRegistroSQL = `
+// insertRegistroSQL crea la fila del impacto 1 con conteo = 1. Si la fila ya
+// existe, DO NOTHING deja que el flujo decida si toca completar el binomio.
+const insertRegistroSQL = `
 INSERT INTO registros_raw (
     hash_largo, hash_corto, grupo_raw, usuario_raw, nombre_push,
-    caption, timestamp_msg, es_imagen, instancia, url_imagen, conteo, estado
+    caption, timestamp_msg, es_imagen, instancia, url_imagen,
+    conteo, estado, hash_imagen
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8, NULL, 1, 'RECIBIDO')
-ON CONFLICT (hash_largo) DO UPDATE SET
-    conteo = registros_raw.conteo + 1,
-    hash_corto = COALESCE(NULLIF(EXCLUDED.hash_corto, ''), registros_raw.hash_corto),
-    caption = COALESCE(NULLIF(EXCLUDED.caption, ''), registros_raw.caption),
-    usuario_raw = COALESCE(NULLIF(EXCLUDED.usuario_raw, ''), registros_raw.usuario_raw),
-    grupo_raw = COALESCE(NULLIF(EXCLUDED.grupo_raw, ''), registros_raw.grupo_raw),
-    nombre_push = COALESCE(NULLIF(EXCLUDED.nombre_push, ''), registros_raw.nombre_push)
-RETURNING conteo, estado`
+VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8, NULL, 1, 'RECIBIDO', $1)
+ON CONFLICT (hash_largo) DO NOTHING
+RETURNING COALESCE(conteo, 0), COALESCE(estado, 'RECIBIDO')`
 
-const countImpactosSQL = `
-SELECT COUNT(*) FROM impactos_raw
-WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))
-  AND eliminado_en IS NULL`
+// updateRegistroParSQL completa el binomio usando el segundo impacto real de
+// impactos_raw (OFFSET 1), no el payload que reintenta el webhook. Así un
+// reintento recupera el estado aunque el UPDATE anterior haya fallado.
+const updateRegistroParSQL = `
+UPDATE registros_raw AS r
+SET conteo = 2,
+    usuario_raw_2 = COALESCE(r.usuario_raw_2, s.usuario_raw),
+    grupo_raw_2 = COALESCE(r.grupo_raw_2, s.grupo_raw),
+    estado = 'PROCESADO',
+    hash_imagen = COALESCE(r.hash_imagen, r.hash_largo),
+    timestamp_msg = COALESCE(r.timestamp_msg, s.timestamp_msg)
+FROM (
+    SELECT usuario_raw, grupo_raw, timestamp_msg
+    FROM impactos_raw
+    WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))
+      AND eliminado_en IS NULL
+    ORDER BY id ASC
+    LIMIT 1 OFFSET 1
+) AS s
+WHERE LOWER(TRIM(r.hash_largo)) = LOWER(TRIM($1))
+  AND COALESCE(r.conteo, 0) < 2
+RETURNING r.conteo, COALESCE(r.estado, 'PROCESADO')`
+
+const selectRegistroSQL = `
+SELECT COALESCE(conteo, 0), COALESCE(estado, 'RECIBIDO')
+FROM registros_raw WHERE hash_largo = $1`
 
 const claimJobSQL = `
 UPDATE registros_raw SET estado = 'EN_COLA'
-WHERE hash_largo = $1 AND estado IN ('RECIBIDO', 'FALLO')`
+WHERE hash_largo = $1 AND estado IN ('RECIBIDO', 'FALLO', 'PROCESADO')`
 
 const marcarEstadoSQL = `UPDATE registros_raw SET estado = $2 WHERE hash_largo = $1`
 
-// Registrar es idempotente por impacto: inserta la fila de origen y devuelve
-// cuántos impactos distintos existen para el hash. El upsert de registros_raw
-// se conserva por compatibilidad con el panel de remitHub.
+// Registrar inserta el impacto y mantiene el binomio en registros_raw con el
+// esquema real: impacto 1 INSERT conteo=1; impacto 2 UPDATE conteo=2 y
+// estado='PROCESADO'. Devuelve Completo solo cuando esta llamada cerró el par.
 func (r *Repository) Registrar(ctx context.Context, event Event) (Registro, error) {
 	if _, err := r.db.Exec(ctx, insertImpactoSeguroSQL,
 		event.HashLargo, event.HashCorto, event.Instancia, event.Usuario,
 		event.Grupo, event.NombrePush, event.Caption, event.Timestamp); err != nil {
-		return Registro{}, fmt.Errorf("ingesta: guardar impacto: %w", err)
+		return Registro{}, r.sqlFail("insert_impactos_raw",
+			fmt.Errorf("ingesta: guardar impacto: %w", err))
 	}
 
 	var registro Registro
 	var estado string
-	err := r.db.QueryRow(ctx, upsertRegistroSQL,
+	err := r.db.QueryRow(ctx, insertRegistroSQL,
 		event.HashLargo, event.HashCorto, event.Grupo, event.Usuario,
 		event.NombrePush, event.Caption, event.Timestamp, event.Instancia).
 		Scan(&registro.Conteo, &estado)
+	switch {
+	case err == nil:
+		registro.Estado = Estado(estado)
+	case !errors.Is(err, pgx.ErrNoRows):
+		return Registro{}, r.sqlFail("insert_registros_raw",
+			fmt.Errorf("ingesta: guardar registro: %w", err))
+	}
+
+	err = r.db.QueryRow(ctx, updateRegistroParSQL, event.HashLargo).
+		Scan(&registro.Conteo, &estado)
+	if err == nil {
+		registro.Estado = Estado(estado)
+		registro.Completo = true
+		return registro, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return Registro{}, r.sqlFail("update_registros_raw_par",
+			fmt.Errorf("ingesta: completar binomio: %w", err))
+	}
+	if registro.Conteo > 0 {
+		return registro, nil
+	}
+
+	err = r.db.QueryRow(ctx, selectRegistroSQL, event.HashLargo).
+		Scan(&registro.Conteo, &estado)
 	if err != nil {
-		return Registro{}, fmt.Errorf("ingesta: guardar registro: %w", err)
+		return Registro{}, r.sqlFail("select_registros_raw",
+			fmt.Errorf("ingesta: leer registro: %w", err))
 	}
 	registro.Estado = Estado(estado)
-
-	if err := r.db.QueryRow(ctx, countImpactosSQL, event.HashLargo).
-		Scan(&registro.Conteo); err != nil {
-		return Registro{}, fmt.Errorf("ingesta: contar impactos: %w", err)
-	}
 	return registro, nil
 }
 
-// Claim evita encolar dos veces el mismo binomio: solo la transición desde
-// RECIBIDO o FALLO devuelve true.
+// Claim evita encolar dos veces el mismo binomio. PROCESADO se acepta porque
+// el impacto 2 marca el par como completo antes de encolarlo.
 func (r *Repository) Claim(ctx context.Context, hash string) (bool, error) {
 	tag, err := r.db.Exec(ctx, claimJobSQL, hash)
 	if err != nil {
-		return false, fmt.Errorf("ingesta: reclamar trabajo: %w", err)
+		return false, r.sqlFail("claim_registros_raw",
+			fmt.Errorf("ingesta: reclamar trabajo: %w", err))
 	}
 	return tag.RowsAffected() > 0, nil
 }
@@ -89,7 +136,8 @@ func (r *Repository) Claim(ctx context.Context, hash string) (bool, error) {
 // reenviar el webhook y Claim lo volverá a encolar.
 func (r *Repository) MarcarEstado(ctx context.Context, hash string, estado Estado) error {
 	if _, err := r.db.Exec(ctx, marcarEstadoSQL, hash, string(estado)); err != nil {
-		return fmt.Errorf("ingesta: marcar %s: %w", estado, err)
+		return r.sqlFail("marcar_estado_registros_raw",
+			fmt.Errorf("ingesta: marcar %s: %w", estado, err))
 	}
 	return nil
 }

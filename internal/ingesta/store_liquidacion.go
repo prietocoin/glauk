@@ -77,7 +77,8 @@ func (r *Repository) GuardarLiquidacion(ctx context.Context, in LiquidacionInput
 		snapshot.Monto1, snapshot.Tasa1, snapshot.ME1,
 		socio2, snapshot.TipoOp2, snapshot.Monto2, snapshot.Tasa2,
 		snapshot.ME2, snapshot.LoteTasa); err != nil {
-		return fmt.Errorf("ingesta: guardar liquidación: %w", err)
+		return r.sqlFail("upsert_comprobantes_liq",
+			fmt.Errorf("ingesta: guardar liquidación: %w", err))
 	}
 	if !escribirFinal || !r.finalDisponible(ctx) {
 		return nil
@@ -103,7 +104,10 @@ func (r *Repository) guardarFinal(ctx context.Context, in LiquidacionInput,
 		snapshot.Monto2, snapshot.Monto2, snapshot.ME2,
 		result.MonedaBase2, result.Polaridad2,
 		profileJSON(result.Perfil1), profileJSON(result.Perfil2))
-	return err
+	if err != nil {
+		return r.sqlFail("upsert_comprobantes_final", err)
+	}
+	return nil
 }
 
 // dateParts usa el huso fijo de Venezuela para no depender de tzdata en el
