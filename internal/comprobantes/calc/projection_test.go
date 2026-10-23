@@ -156,12 +156,16 @@ func TestProjectionHelpers(t *testing.T) {
 		t.Fatal("resolveSocio2")
 	}
 	conf := CurrencyConfig{Tipo: "P"}
-	if operationLetter(SourceRow{RolSocio1: "proveedor"}, conf, "X", "", "USDT", "COP") != "P" ||
-		operationLetter(SourceRow{RolSocio1: "PROVEEDOR", TipoOp1: socioPtr("D-COP")}, conf, "X", "", "USDT", "COP") != "D" ||
-		operationLetter(SourceRow{RolSocio1: "PROVEEDOR", TipoOp1: socioPtr("A-COP")}, conf, "X", "", "USDT", "COP") != "P" ||
-		operationLetter(SourceRow{RolSocio1: "SOCIO", TipoOp1: socioPtr("P-COP")}, conf, "X", "", "USDT", "COP") != "P" ||
-		operationLetter(SourceRow{RolSocio1: "SOCIO", MonedaSocio1: "COP"}, conf, "FUNDA", "", "COP", "COP") != "A" ||
-		operationLetter(SourceRow{RolSocio1: "SOCIO", MonedaSocio1: "COP"}, CurrencyConfig{}, "GENERAL", "", "COP", "COP") != "D" {
+	if operationLetter(SourceRow{RolSocio1: "proveedor"}, conf, "X", "", "COP") != "P" ||
+		operationLetter(SourceRow{RolSocio1: "PROVEEDOR", TipoOp1: socioPtr("D-COP")}, conf, "X", "", "COP") != "P" ||
+		operationLetter(SourceRow{RolSocio1: "PROVEEDOR", TipoOp1: socioPtr("A-COP")}, conf, "X", "", "COP") != "P" ||
+		operationLetter(SourceRow{RolSocio1: "SOCIO", TipoOp1: socioPtr("P-COP")}, conf, "X", "", "COP") != "P" ||
+		// Un D guardado ya no manda sobre el contrato: si el perfil dice P, la
+		// proyección debe devolver P.
+		operationLetter(SourceRow{RolSocio1: "SOCIO", TipoOp1: socioPtr("D-COP")}, conf, "X", "", "COP") != "P" ||
+		// La coincidencia con la moneda base ya no inventa un abono.
+		operationLetter(SourceRow{RolSocio1: "SOCIO", MonedaSocio1: "COP"}, conf, "FUNDA", "", "COP") != "P" ||
+		operationLetter(SourceRow{RolSocio1: "SOCIO", MonedaSocio1: "COP"}, CurrencyConfig{}, "GENERAL", "", "COP") != "D" {
 		t.Fatal("operationLetter")
 	}
 	if domain.NormalizeCurrency(" usdt ", "") != "USDT" {
@@ -212,5 +216,33 @@ func TestProjectRowLiveParidadConSnapshot(t *testing.T) {
 	}
 	if got.Monto1 >= 0 || got.Monto2 <= 0 {
 		t.Fatalf("el ancla de herencia debe oponer los signos: %+v", got)
+	}
+}
+
+// TestProjectRowUsaTipoDelPerfilSobreTipoGuardado reproduce la tarjeta de
+// NELSY/FUNDDA en PEN: comprobantes_liq traía P-PEN y la UI seguía pintando
+// Pago aunque el perfil vigente configura D. La proyección debe ignorar la
+// letra almacenada para toda operación que no sea abono y leer el contrato de
+// socio 1 para la divisa.
+func TestProjectRowUsaTipoDelPerfilSobreTipoGuardado(t *testing.T) {
+	perfil1 := []byte(`{"nombre":"NELSY","rol":"SOCIO","moneda_base":"USDT",` +
+		`"monedas":{"PEN":{"activo":true,"tipo":"D","polar_D":"+","polar_P":"-",` +
+		`"porcentaje":{"deposito":0,"pago":0}}}}`)
+	row := SourceRow{
+		HashLargo: "nelsey-pen", Monto: 100, Moneda: "PEN", EstaLiquidado: true,
+		Socio1: socioPtr("NELSY"), TipoOp1: socioPtr("P-PEN"),
+		RolSocio1: "SOCIO", MonedaSocio1: "USDT",
+		TasasLote: []byte(`{"PEN":3.39,"USDT":1}`),
+		Socio1Row: perfil1,
+	}
+	got := ProjectRow(row, Profile{})
+	if got.TipoOp1 != "D-PEN" || got.TipoOp2 != "D-PEN" {
+		t.Fatalf("la letra debe venir del perfil, no de TipoOp1: %+v", got)
+	}
+	if got.Monto1 <= 0 {
+		t.Fatalf("polar_D=+ debe proyectar 100 PEN como depósito positivo: %v", got.Monto1)
+	}
+	if got.Monto1 < 29.49 || got.Monto1 > 29.51 {
+		t.Fatalf("monto1 = %v, se esperaba ~+29.50 USDT", got.Monto1)
 	}
 }

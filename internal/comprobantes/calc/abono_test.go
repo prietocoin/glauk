@@ -115,7 +115,8 @@ func TestProjectRowIRISCOPCaptionGobiernaLaNaturaleza(t *testing.T) {
 	}{
 		{"pago sin caption no es abono", nil, caption("pago nequi"), "D-COP", false},
 		{"caption vacío no es abono", nil, caption(""), "D-COP", false},
-		{"abono explícito se conserva", nil, caption("abono a capital"), "A-COP", true},
+		{"abono explícito se conserva", caption("A-COP"), caption("abono a capital"), "A-COP", true},
+		{"P guardado con caption no se promueve", caption("P-COP"), caption("abono a capital"), "D-COP", false},
 		{"A guardado sin caption se revierte", caption("A-COP"), caption("transferencia"), "D-COP", false},
 		{"A guardado con caption se conserva", caption("A-COP"), caption("ABONO"), "A-COP", true},
 	}

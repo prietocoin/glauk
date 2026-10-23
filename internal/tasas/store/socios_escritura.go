@@ -46,13 +46,14 @@ func UpdateSocio(ctx context.Context, q Querier, nombre string, cambios SocioUpd
 	return scanSocio(rows)
 }
 
-// monedasCanonicas traduce la forma de Tasas al superset que Perfiles persiste.
+// monedasCanonicas traduce la forma de Tasas al contrato que Perfiles persiste.
 //
 // Tasas solo interpreta activo y porcentaje, pero el JSONB es compartido con el
 // modal de Perfiles. Al convertir antes de escribir, el codec canónico completa
-// tipo, polar_D y polar_P (y sus alias legacy) en vez de reemplazar la fila por
-// las dos únicas claves que Tasas entiende. Un activo ausente significa publicar,
-// igual que en la lectura histórica.
+// tipo, polar_D y polar_P en vez de reemplazar la fila por las dos únicas claves
+// que Tasas entiende. Los alias legacy solo se transportan para que una fila
+// histórica no pierda su tipo antes de que el codec la normalice. Un activo
+// ausente significa publicar, igual que en la lectura histórica.
 func monedasCanonicas(monedas map[string]*domain.Moneda) perfilesmodel.Monedas {
 	salida := make(perfilesmodel.Monedas, len(monedas))
 	for codigo, moneda := range monedas {

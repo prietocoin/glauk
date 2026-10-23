@@ -38,7 +38,7 @@ WHERE nombre IS NOT NULL
 ORDER BY nombre ASC`
 
 // UpsertSQL es atómico y requiere el índice único sobre UPPER(BTRIM(nombre)).
-// monedas se pasa ya codificado por el codec superset de repo/monedas_codec.go.
+// monedas se pasa ya codificado por el codec canónico de repo/monedas_codec.go.
 const UpsertSQL = `
 INSERT INTO perfiles_glaukov (id_grupo, nombre, rol, moneda_base, saldo_inicial, mostrar, monedas, herencia)
 VALUES ($1, UPPER(BTRIM($2)), $3, $4, $5::text::numeric, $6::jsonb, $7::jsonb, $8)
@@ -64,7 +64,8 @@ WHERE UPPER(BTRIM(nombre)) = UPPER(BTRIM($2))` + returningPerfil
 // tercer argumento es el JSONB tal como se leyó: la condición evita pisar una
 // escritura concurrente entre el SELECT del lector y este UPDATE. Si la fila ya
 // cambió, afecta 0 filas y el lector devuelve igualmente la vista canonicalizada
-// en memoria, porque el siguiente guardado del socio persistirá el superset.
+// en memoria, porque el siguiente guardado del socio persistirá el contrato
+// canónico.
 const NormalizarMonedasSQL = `
 UPDATE perfiles_glaukov
 SET monedas = $1::jsonb

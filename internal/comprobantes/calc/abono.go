@@ -59,14 +59,16 @@ func contieneIndicadorAbono(caption string) bool {
 	return false
 }
 
-// tipoContractual lee la naturaleza configurada en perfiles_glaukov. Solo D y P
-// son contratos operativos; cualquier valor ausente o desconocido cae en D, que
-// es el default histórico del motor.
+// tipoContractual lee la naturaleza configurada en perfiles_glaukov. La fuente
+// principal es tipo; def solo se acepta como alias de filas históricas. Solo D y
+// P son contratos operativos: cualquier valor ausente o desconocido cae en D,
+// que es el default histórico del motor.
 func tipoContractual(conf CurrencyConfig) string {
-	switch tipo := OperationNature(conf.Tipo); tipo {
-	case "D", "P":
-		return tipo
-	default:
-		return "D"
+	for _, valor := range []string{conf.Tipo, conf.Def} {
+		switch tipo := strings.ToUpper(strings.TrimSpace(valor)); tipo {
+		case "D", "P":
+			return tipo
+		}
 	}
+	return "D"
 }

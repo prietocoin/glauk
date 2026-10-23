@@ -59,7 +59,10 @@ func TestMonedaMapeaContratoPolaridadYActivo(t *testing.T) {
 	}
 }
 
-func TestMonedaRoundTripSuperset(t *testing.T) {
+func TestMonedaRoundTripCanonico(t *testing.T) {
+	canonicas := map[string]struct{}{
+		"activo": {}, "tipo": {}, "polar_D": {}, "polar_P": {}, "porcentaje": {},
+	}
 	fixtures := []string{
 		`{"porcentaje":{"deposito":2.5,"pago":1.5}}`,
 		`{"def":"D","deposito":2.5,"dep_op":"+","pago":1.5,"pago_op":"-"}`,
@@ -78,8 +81,13 @@ func TestMonedaRoundTripSuperset(t *testing.T) {
 		if err := json.Unmarshal(primera, &claves); err != nil {
 			t.Fatalf("claves: %v", err)
 		}
-		if len(claves) != 11 {
-			t.Fatalf("superset tiene %d claves: %s", len(claves), primera)
+		if len(claves) != len(canonicas) {
+			t.Fatalf("el contrato tiene %d claves, quiero %d: %s", len(claves), len(canonicas), primera)
+		}
+		for clave := range claves {
+			if _, ok := canonicas[clave]; !ok {
+				t.Fatalf("clave legacy %q en %s", clave, primera)
+			}
 		}
 		var releida Moneda
 		if err := json.Unmarshal(primera, &releida); err != nil {
@@ -117,7 +125,8 @@ func TestPorcentajeGanaSobreLegacy(t *testing.T) {
 }
 
 // TestGuardarRequestConservaPolaridades cubre el payload exacto del modal de
-// Perfiles: tipo, polar_D y polar_P deben sobrevivir al Unmarshal y al superset.
+// Perfiles: tipo, polar_D y polar_P deben sobrevivir al Unmarshal y al contrato
+// canónico, sin reinyectar los alias legacy.
 func TestGuardarRequestConservaPolaridades(t *testing.T) {
 	payload := `{"nombre":"X","monedas":{"COP":{"activo":true,"tipo":"P","polar_D":"-","polar_P":"+","porcentaje":{"deposito":2.5,"pago":1.5}}}}`
 	var req GuardarRequest
@@ -139,12 +148,14 @@ func TestGuardarRequestConservaPolaridades(t *testing.T) {
 	if err := json.Unmarshal(raw, &claves); err != nil {
 		t.Fatalf("claves: %v", err)
 	}
-	for _, clave := range []string{
-		"activo", "porcentaje", "def", "deposito", "dep_op", "pago",
-		"pago_op", "tipo", "polar_D", "polar_P", "polaridad",
-	} {
+	for _, clave := range []string{"activo", "tipo", "polar_D", "polar_P", "porcentaje"} {
 		if _, ok := claves[clave]; !ok {
 			t.Fatalf("falta %q en %s", clave, raw)
+		}
+	}
+	for _, clave := range []string{"def", "deposito", "dep_op", "pago", "pago_op", "polaridad"} {
+		if _, ok := claves[clave]; ok {
+			t.Fatalf("clave legacy %q reinyectada en %s", clave, raw)
 		}
 	}
 }

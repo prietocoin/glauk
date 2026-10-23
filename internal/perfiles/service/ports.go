@@ -17,7 +17,7 @@ type Lector interface {
 }
 
 // Escritor es la parte de escritura del repositorio. El servicio decide defaults
-// y protecciones; el repositorio solo ejecuta SQL y aplica el codec superset.
+// y protecciones; el repositorio solo ejecuta SQL y aplica el codec canónico.
 type Escritor interface {
 	Guardar(ctx context.Context, params repo.UpsertParams) (model.Perfil, error)
 	Toggle(ctx context.Context, nombre string, activo bool) (model.Perfil, error)

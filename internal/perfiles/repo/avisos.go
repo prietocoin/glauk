@@ -11,8 +11,8 @@ import (
 // solo sabe qué campo legacy fue descartado y cuál valor de porcentaje ganó.
 //
 // El WARN es la señal operativa para detectar datos divergentes entre Tasas y
-// Perfiles. No se corrige la fila en lectura: el superset se persiste en la
-// siguiente escritura del socio, tal como exige la migración no destructiva.
+// Perfiles. La fila se corrige en la siguiente lectura o escritura del socio,
+// tal como exige la migración no destructiva.
 // El código ISO se incluye siempre en mayúsculas para que la auditoría pueda
 // agrupar por moneda sin normalizar los logs. Nunca se registra el JSON completo
 // ni un JID: solo el nombre del socio, la moneda, el campo y los dos valores

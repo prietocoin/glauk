@@ -28,7 +28,7 @@ func ProjectRow(row SourceRow, fundda Profile) domain.Comprobante {
 	profile2 := DecodeProfile(row.Socio2Row)
 	cfg1 := ResolveLiveSocioConfig(socio1, profile1, divisa, fundda, monedaSocio1)
 	cfg2 := ResolveLiveSocioConfig(socio2Nombre, profile2, divisa, fundda, monedaSocio2)
-	tipoLetra := operationLetter(row, cfg1.Conf, socio1, socio2Nombre, monedaSocio1, divisa)
+	tipoLetra := operationLetter(row, cfg1.Conf, socio1, socio2Nombre, divisa)
 	tipoTag := tipoLetra + "-" + divisa
 	signo1, signo2 := SideSigns(cfg1, cfg2, tipoLetra, socio1)
 	tasa1, monto1, me1, tasa2, monto2, me2 := CalculateAmounts(
@@ -71,26 +71,23 @@ func resolveSocio2(row SourceRow, liquidado bool) *string {
 	return &trimmed
 }
 
-func operationLetter(row SourceRow, conf CurrencyConfig, socio1, socio2, monedaSocio1, divisa string) string {
-	rol := domain.NormalizeCurrency(row.RolSocio1, "SOCIO")
-	guardada := savedLetter(row.TipoOp1)
-	var candidata string
-	switch {
-	case rol == "PROVEEDOR" && guardada != "" && guardada != "A":
-		candidata = guardada
-	case rol == "PROVEEDOR":
-		candidata = domain.NormalizeCurrency(conf.Tipo, "D")
-	case guardada != "":
-		candidata = guardada
-	case monedaSocio1 == divisa && socio1 != "GENERAL":
+func operationLetter(row SourceRow, conf CurrencyConfig, socio1, socio2, divisa string) string {
+	// La letra de una operación que no es abono no se toma de comprobantes_liq:
+	// el contrato vivo del socio 1 para la divisa es la única fuente de verdad.
+	// Así una fila histórica con P-PEN no puede seguir pintando Pago cuando el
+	// perfil ya configura D. Solo un abono almacenado conserva la A; los
+	// proveedores nunca la reciben porque su contrapartida la fija el contrato.
+	candidata := tipoContractual(conf)
+	if !esRolProveedor(row.RolSocio1) && savedLetter(row.TipoOp1) == "A" {
 		candidata = "A"
-	default:
-		candidata = domain.NormalizeCurrency(conf.Tipo, "D")
 	}
-	// La proyección viva aplica la misma regla que el snapshot: un "A" guardado
-	// o inferido por coincidencia de moneda no se procesa como abono para IRIS
-	// en COP si el caption no lo declara.
+	// La regla de IRIS en COP se aplica después: un A sin caption explícito
+	// vuelve al tipo contractual y a sus polar_D / polar_P.
 	return NatureForAbono(candidata, socio1, socio2, divisa, captionOf(row), conf)
+}
+
+func esRolProveedor(rol string) bool {
+	return domain.NormalizeCurrency(rol, "SOCIO") == "PROVEEDOR"
 }
 
 func captionOf(row SourceRow) string {

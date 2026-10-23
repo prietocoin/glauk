@@ -17,8 +17,11 @@ type Profile struct {
 
 // CurrencyConfig modela la configuración JSONB de una divisa.
 type CurrencyConfig struct {
-	Activo     bool   `json:"activo"`
-	Tipo       string `json:"tipo"`
+	Activo bool   `json:"activo"`
+	Tipo   string `json:"tipo"`
+	// Def es un alias histórico de tipo. El contrato nuevo ya no lo escribe:
+	// solo se lee para no perder filas que aún no migraron a tipo.
+	Def        string `json:"def,omitempty"`
 	PolarD     string `json:"polar_D"`
 	PolarP     string `json:"polar_P"`
 	Polaridad  string `json:"polaridad"`

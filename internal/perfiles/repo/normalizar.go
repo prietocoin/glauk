@@ -8,15 +8,18 @@ import (
 	"glauk/internal/perfiles/model"
 )
 
-// clavesCanonicasMoneda son las claves mínimas que Comprobantes necesita para
-// clasificar una operación sin recurrir a heurísticas. Si alguna falta en una
-// divisa activa, el motor financiero cae a defaults y puede invertir el signo.
-var clavesCanonicasMoneda = [...]string{"tipo", "polar_D", "polar_P"}
+// clavesCanonicasMoneda es el contrato exacto de una divisa en
+// perfiles_glaukov.monedas. Cualquier clave adicional es deuda histórica
+// (def, dep_op, pago_op, polaridad, deposito, pago) y se elimina al normalizar.
+var clavesCanonicasMoneda = map[string]struct{}{
+	"activo": {}, "tipo": {}, "polar_D": {}, "polar_P": {}, "porcentaje": {},
+}
 
-// monedasIncompletas informa si alguna divisa activa del JSONB crudo omite
-// tipo, polar_D o polar_P. Una clave presente con cadena vacía cuenta como
-// ausente: el codec la reemplazaría igual con el default canónico. Las divisas
-// inactivas no se tocan para no reescribir configuración que el operador apagó.
+// monedasIncompletas informa si alguna divisa activa del JSONB crudo no cumple
+// el contrato canónico: falta alguna de sus cinco claves, sobra una clave
+// legacy o tipo/polar_D/polar_P llegan vacíos. Una cadena vacía cuenta como
+// ausente porque el codec la reemplazaría con el default. Las divisas inactivas
+// no se tocan para no reescribir configuración que el operador apagó.
 func monedasIncompletas(raw []byte) bool {
 	if len(raw) == 0 {
 		return false
@@ -33,7 +36,15 @@ func monedasIncompletas(raw []byte) bool {
 		if !monedaActiva(moneda) {
 			continue
 		}
-		for _, clave := range clavesCanonicasMoneda {
+		if len(moneda) != len(clavesCanonicasMoneda) {
+			return true
+		}
+		for clave := range moneda {
+			if _, ok := clavesCanonicasMoneda[clave]; !ok {
+				return true
+			}
+		}
+		for _, clave := range []string{"tipo", "polar_D", "polar_P"} {
 			if textoCrudo(moneda[clave]) == "" {
 				return true
 			}
@@ -69,11 +80,11 @@ func textoCrudo(raw json.RawMessage) string {
 	return strings.TrimSpace(texto)
 }
 
-// normalizarMonedas persiste el superset canónico cuando la fila leída quedó
-// incompleta. El perfil ya viene canonicalizado en memoria por el codec, así que
-// el socio ve los valores correctos aunque el UPDATE falle o pierda la carrera
-// contra otra escritura. El fallo solo se registra: la lectura no se rompe por
-// un saneamiento de datos históricos.
+// normalizarMonedas persiste el contrato canónico cuando la fila leída quedó
+// incompleta o conserva claves legacy. El perfil ya viene canonicalizado en
+// memoria por el codec, así que el socio ve los valores correctos aunque el
+// UPDATE falle o pierda la carrera contra otra escritura. El fallo solo se
+// registra: la lectura no se rompe por un saneamiento de datos históricos.
 func (r *Reader) normalizarMonedas(ctx context.Context, perfil model.Perfil, crudo []byte) {
 	if !monedasIncompletas(crudo) {
 		return

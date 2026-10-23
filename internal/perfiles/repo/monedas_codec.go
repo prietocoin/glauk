@@ -9,8 +9,9 @@ import (
 
 // encodeMonedas es el único serializador de perfiles_glaukov.monedas. Normaliza
 // el código ISO a mayúsculas, completa defaults con model.Canonica y emite el
-// superset de once claves. Un código vacío se descarta: no representa una moneda
-// real y no debe llegar a un jsonb que consumen tres motores.
+// contrato canónico de cinco claves (activo, tipo, polar_D, polar_P,
+// porcentaje). Un código vacío se descarta: no representa una moneda real y no
+// debe llegar a un jsonb que consumen tres motores.
 //
 // El resultado es independiente del orden del mapa porque encoding/json ordena
 // las claves, lo que hace estables los fixtures y las comparaciones de auditoría.

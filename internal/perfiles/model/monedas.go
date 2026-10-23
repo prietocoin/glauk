@@ -15,10 +15,10 @@ type Porcentajes struct {
 	Pago     float64 `json:"pago"`
 }
 
-// Moneda es el superset compatible con Tasas, Perfiles y Comprobantes.
-// Al leer acepta las tres formas históricas y deriva las claves que falten. Al
-// escribir emite siempre todas las claves, de modo que ningún consumidor pierda
-// la semántica que ya usaba; los conflictos quedan para el WARN del llamador.
+// Moneda acepta al leer las formas históricas de Tasas, Perfiles y Comprobantes
+// y deriva internamente las claves que falten. Al escribir emite únicamente el
+// contrato canónico de cinco claves (activo, tipo, polar_D, polar_P y
+// porcentaje): los alias legacy nunca vuelven al JSONB.
 type Moneda struct {
 	Activo             bool        `json:"activo"`
 	Porcentaje         Porcentajes `json:"porcentaje"`
@@ -112,10 +112,28 @@ func aplicarPorcentaje(e monedaEntrada, deposito, pago float64, conflictos *[]Co
 	return deposito, pago
 }
 
-// MarshalJSON emite el superset completo, sin las marcas internas de conflicto.
+// monedaSalida es el contrato exacto de perfiles_glaukov.monedas[divisa].
+// Los alias históricos se aceptan al leer, pero no se serializan.
+type monedaSalida struct {
+	Activo     bool        `json:"activo"`
+	Tipo       string      `json:"tipo"`
+	PolarD     string      `json:"polar_D"`
+	PolarP     string      `json:"polar_P"`
+	Porcentaje Porcentajes `json:"porcentaje"`
+}
+
+// MarshalJSON emite solo el contrato canónico, sin las marcas internas de
+// conflicto ni la duplicación legacy (def, deposito, dep_op, pago, pago_op,
+// polaridad).
 func (m Moneda) MarshalJSON() ([]byte, error) {
-	type salida Moneda
-	return json.Marshal(salida(m))
+	canonica := m.Canonica()
+	return json.Marshal(monedaSalida{
+		Activo:     canonica.Activo,
+		Tipo:       canonica.Tipo,
+		PolarD:     canonica.PolarD,
+		PolarP:     canonica.PolarP,
+		Porcentaje: canonica.Porcentaje,
+	})
 }
 
 func numeroDe(valor *FlexibleFloat) float64 {

@@ -111,14 +111,20 @@ func TestEncodeMonedasCanonico(t *testing.T) {
 	if len(salida) != 1 || salida["ARS"] == nil {
 		t.Fatalf("código no normalizado: %s", data)
 	}
-	if len(salida["ARS"]) != 11 {
-		t.Fatalf("superset incompleto: %s", data)
+	if len(salida["ARS"]) != 5 {
+		t.Fatalf("contrato canónico incompleto: %s", data)
 	}
-	if salida["ARS"]["def"] != "D" || salida["ARS"]["polaridad"] != "+" {
+	if salida["ARS"]["tipo"] != "D" || salida["ARS"]["polar_D"] != "+" || salida["ARS"]["polar_P"] != "-" {
 		t.Fatalf("defaults ausentes: %s", data)
 	}
-	if salida["ARS"]["deposito"] != 2.5 || salida["ARS"]["pago"] != 1.5 {
+	porcentaje, ok := salida["ARS"]["porcentaje"].(map[string]any)
+	if !ok || porcentaje["deposito"] != 2.5 || porcentaje["pago"] != 1.5 {
 		t.Fatalf("valores programáticos perdidos: %s", data)
+	}
+	for _, clave := range []string{"def", "deposito", "dep_op", "pago", "pago_op", "polaridad"} {
+		if _, ok := salida["ARS"][clave]; ok {
+			t.Fatalf("clave legacy %q reinyectada: %s", clave, data)
+		}
 	}
 }
 
@@ -129,9 +135,10 @@ func TestMonedasIncompletas(t *testing.T) {
 		quiero bool
 	}{
 		{"solo tasas", `{"ARS":{"porcentaje":{"deposito":2.5,"pago":1.5}}}`, true},
-		{"superset", `{"ARS":{"activo":true,"tipo":"D","polar_D":"+","polar_P":"-"}}`, false},
-		{"tipo vacío", `{"ARS":{"activo":true,"tipo":"","polar_D":"+","polar_P":"-"}}`, true},
-		{"sin polar_P", `{"ARS":{"activo":true,"tipo":"D","polar_D":"+"}}`, true},
+		{"contrato canónico", `{"ARS":{"activo":true,"tipo":"D","polar_D":"+","polar_P":"-","porcentaje":{"deposito":2.5,"pago":1.5}}}`, false},
+		{"once claves legacy", `{"ARS":{"activo":true,"porcentaje":{"deposito":2.5,"pago":1.5},"def":"D","deposito":2.5,"dep_op":"+","pago":1.5,"pago_op":"-","tipo":"D","polar_D":"+","polar_P":"-","polaridad":"+"}}`, true},
+		{"tipo vacío", `{"ARS":{"activo":true,"tipo":"","polar_D":"+","polar_P":"-","porcentaje":{"deposito":1}}}`, true},
+		{"sin polar_P", `{"ARS":{"activo":true,"tipo":"D","polar_D":"+","porcentaje":{"deposito":1}}}`, true},
 		{"inactiva incompleta", `{"ARS":{"activo":false}}`, false},
 		{"activo omitido", `{"ARS":{"porcentaje":{"deposito":1}}}`, true},
 		{"vacío", `{}`, false},
@@ -152,7 +159,7 @@ func TestReaderListarNoReescribeMonedasCompletas(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer mock.Close()
-	completas := []byte(`{"ARS":{"activo":true,"tipo":"P","polar_D":"-","polar_P":"+"}}`)
+	completas := []byte(`{"ARS":{"activo":true,"tipo":"P","polar_D":"-","polar_P":"+","porcentaje":{"deposito":1.5,"pago":2.5}}}`)
 	rows := pgxmock.NewRows(columnasPerfil).AddRow(
 		"120@g.us", "NELSY", "SOCIO", "USDT", "0",
 		[]byte(`{"tasas":true}`), completas, false,
@@ -184,7 +191,7 @@ func TestReaderPorNombreNormalizaMonedasHistoricas(t *testing.T) {
 		[]byte(`{"tasas":true}`), historicas, false,
 	)
 	mock.ExpectQuery(PorNombreSQL).WithArgs("NELSY").WillReturnRows(rows)
-	// El payload persistido debe ser el superset canónico, con el porcentaje
+	// El payload persistido debe ser el contrato canónico, con el porcentaje
 	// original intacto, y el JSONB crudo como guarda contra escrituras
 	// concurrentes.
 	mock.ExpectExec(NormalizarMonedasSQL).
