@@ -139,6 +139,27 @@ func TestRutasEscritura(t *testing.T) {
 	}
 }
 
+// TestGuardarConservaPolaridades comprueba que el handler entrega al repositorio
+// el contrato canónico sin descartar tipo, polar_D ni polar_P.
+func TestGuardarConservaPolaridades(t *testing.T) {
+	store := &fakeStore{}
+	app := appDePrueba(t, store)
+	body := `{"socio":"NUEVO","jid":"120@g.us","monedas":{"COP":{` +
+		`"activo":true,"tipo":"P","polar_D":"-","polar_P":"+",` +
+		`"porcentaje":{"deposito":1.5,"pago":2.5}}}}`
+	resp, respuesta := pedir(t, app, nethttp.MethodPost, "/api/v1/perfiles/guardar", body)
+	if resp.StatusCode != fiber.StatusOK || !strings.Contains(respuesta, `"success":true`) {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, respuesta)
+	}
+	moneda := store.params.Monedas["COP"]
+	if moneda.Tipo != "P" || moneda.PolarD != "-" || moneda.PolarP != "+" {
+		t.Fatalf("el handler descartó la configuración: %+v", moneda)
+	}
+	if moneda.Porcentaje.Deposito != 1.5 || moneda.Porcentaje.Pago != 2.5 {
+		t.Fatalf("porcentaje = %+v", moneda.Porcentaje)
+	}
+}
+
 func TestDeleteProtegido(t *testing.T) {
 	app := appDePrueba(t, &fakeStore{})
 	resp, body := pedir(t, app, nethttp.MethodDelete, "/api/v1/perfiles/GENERAL", "")

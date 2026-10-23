@@ -116,6 +116,39 @@ func TestPorcentajeGanaSobreLegacy(t *testing.T) {
 	}
 }
 
+// TestGuardarRequestConservaPolaridades cubre el payload exacto del modal de
+// Perfiles: tipo, polar_D y polar_P deben sobrevivir al Unmarshal y al superset.
+func TestGuardarRequestConservaPolaridades(t *testing.T) {
+	payload := `{"nombre":"X","monedas":{"COP":{"activo":true,"tipo":"P","polar_D":"-","polar_P":"+","porcentaje":{"deposito":2.5,"pago":1.5}}}}`
+	var req GuardarRequest
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	moneda := req.Monedas["COP"].Canonica()
+	if !moneda.Activo || moneda.Tipo != "P" || moneda.PolarD != "-" || moneda.PolarP != "+" {
+		t.Fatalf("el payload perdió su configuración: %+v", moneda)
+	}
+	if moneda.Porcentaje.Deposito != 2.5 || moneda.Porcentaje.Pago != 1.5 {
+		t.Fatalf("porcentaje = %+v", moneda.Porcentaje)
+	}
+	raw, err := json.Marshal(moneda)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var claves map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &claves); err != nil {
+		t.Fatalf("claves: %v", err)
+	}
+	for _, clave := range []string{
+		"activo", "porcentaje", "def", "deposito", "dep_op", "pago",
+		"pago_op", "tipo", "polar_D", "polar_P", "polaridad",
+	} {
+		if _, ok := claves[clave]; !ok {
+			t.Fatalf("falta %q en %s", clave, raw)
+		}
+	}
+}
+
 func TestCanonicaConservaPrioridad(t *testing.T) {
 	var conflicto Moneda
 	if err := json.Unmarshal([]byte(`{"porcentaje":{"deposito":5,"pago":2},"deposito":3,"pago":4}`), &conflicto); err != nil {

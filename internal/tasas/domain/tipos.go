@@ -14,9 +14,24 @@ type Porcentajes struct {
 // Activo es un puntero a propósito: el origen omite el campo y una divisa sin él
 // debe seguir publicándose, mientras que false la excluye. Un bool simple no puede
 // representar esa diferencia, y los fixtures dorados la fijan.
+//
+// El resto de campos no participan del cálculo, pero sí del contrato JSONB que
+// comparten Perfiles, Tasas y Comprobantes. Se declaran para que un
+// GET → PUT de /socios no borre tipo, polar_D ni polar_P al reescribir monedas:
+// Tasas no los interpreta, solo los transporta. Los alias legacy se conservan por
+// la misma razón; el codec canónico de Perfiles los completa al persistir.
 type Moneda struct {
 	Activo     *bool       `json:"activo,omitempty"`
 	Porcentaje Porcentajes `json:"porcentaje"`
+	Def        string      `json:"def,omitempty"`
+	Deposito   float64     `json:"deposito,omitempty"`
+	DepOp      string      `json:"dep_op,omitempty"`
+	Pago       float64     `json:"pago,omitempty"`
+	PagoOp     string      `json:"pago_op,omitempty"`
+	Tipo       string      `json:"tipo,omitempty"`
+	PolarD     string      `json:"polar_D,omitempty"`
+	PolarP     string      `json:"polar_P,omitempty"`
+	Polaridad  string      `json:"polaridad,omitempty"`
 }
 
 // Perfil es un socio: su identidad, el grupo donde publica y sus divisas.

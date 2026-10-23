@@ -29,3 +29,11 @@ func encodeMonedas(monedas model.Monedas) ([]byte, error) {
 	}
 	return json.Marshal(salida)
 }
+
+// CodificarMonedas expone el codec canónico a los adaptadores que comparten la
+// columna monedas. Tasas no debe serializar el JSONB por su cuenta: si lo hace,
+// pierde las claves que no interpreta (tipo, polar_D, polar_P) y el guardado del
+// panel de socios borra la configuración del modal de Perfiles.
+func CodificarMonedas(monedas model.Monedas) ([]byte, error) {
+	return encodeMonedas(monedas)
+}

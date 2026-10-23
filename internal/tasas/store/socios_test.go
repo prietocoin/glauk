@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -10,6 +11,23 @@ import (
 	perfilrepo "glauk/internal/perfiles/repo"
 	"glauk/internal/tasas/domain"
 )
+
+// monedasContiene verifica que el JSONB codificado conserve las claves que Tasas
+// no interpreta pero debe transportar.
+type monedasContiene struct{ claves []string }
+
+func (m monedasContiene) Match(valor any) bool {
+	raw, ok := valor.([]byte)
+	if !ok {
+		return false
+	}
+	for _, clave := range m.claves {
+		if !bytes.Contains(raw, []byte(clave)) {
+			return false
+		}
+	}
+	return true
+}
 
 // columnasHeredadas es la tabla tal como está en producción: no tiene `activo`.
 var columnasHeredadas = []string{"nombre", "id_grupo", "moneda_base", "monedas", "modo_prueba", "rol"}
@@ -93,6 +111,7 @@ func TestUpdateSocioEscribeSoloLasColumnasQueExisten(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	args[0] = pgxmock.AnyArg()
 	mock.ExpectQuery(sentencia).WithArgs(args...).
 		WillReturnRows(pgxmock.NewRows(columnasHeredadas).AddRow("Ana", nil, nil, config, nil, ptr("ADMIN")))
 
@@ -101,6 +120,45 @@ func TestUpdateSocioEscribeSoloLasColumnasQueExisten(t *testing.T) {
 	})
 	if err != nil || socio.Rol != "ADMIN" || socio.Monedas["COP"].Porcentaje.Pago != 3 {
 		t.Fatalf("UpdateSocio devolvió %+v, %v", socio, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("quedaron expectativas sin cumplir: %v", err)
+	}
+}
+
+// TestUpdateSocioConservaPolaridades es la regresión del modal de Perfiles: el
+// panel de Tasas reenvía el mapa completo de monedas y el UPDATE no puede
+// reducirlo a activo/porcentaje.
+func TestUpdateSocioConservaPolaridades(t *testing.T) {
+	mock := newMock(t)
+	mock.ExpectQuery(`SELECT * FROM perfiles_glaukov LIMIT 0`).WillReturnRows(pgxmock.NewRows(columnasHeredadas))
+	config := []byte(`{"COP":{"activo":true,"porcentaje":{"deposito":2.5,"pago":3},"def":"D","deposito":2.5,"dep_op":"-","pago":3,"pago_op":"+","tipo":"D","polar_D":"-","polar_P":"+","polaridad":"+"}}`)
+	sentencia, args, err := perfilrepo.SentenciaSocioTasas(
+		map[string]bool{"monedas": true, "modo_prueba": true, "rol": true},
+		perfilrepo.ActualizacionSocioTasas{Monedas: config}, "Ana",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args[0] = monedasContiene{[]string{`"tipo":"D"`, `"polar_D":"-"`, `"polar_P":"+"`, `"porcentaje"`}}
+	mock.ExpectQuery(sentencia).WithArgs(args...).
+		WillReturnRows(pgxmock.NewRows(columnasHeredadas).AddRow("Ana", nil, nil, config, nil, ptr("ADMIN")))
+
+	socio, err := UpdateSocio(context.Background(), mock, "Ana", SocioUpdate{
+		Monedas: map[string]*domain.Moneda{"COP": {
+			Activo:     ptr(true),
+			Porcentaje: domain.Porcentajes{Deposito: 2.5, Pago: 3},
+			Tipo:       "D",
+			PolarD:     "-",
+			PolarP:     "+",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	moneda := socio.Monedas["COP"]
+	if moneda == nil || moneda.Tipo != "D" || moneda.PolarD != "-" || moneda.PolarP != "+" {
+		t.Fatalf("la lectura perdió las polaridades: %+v", moneda)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("quedaron expectativas sin cumplir: %v", err)

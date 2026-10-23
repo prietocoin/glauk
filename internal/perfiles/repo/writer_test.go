@@ -46,7 +46,7 @@ func TestWriterGuardarSuperset(t *testing.T) {
 	mock.ExpectQuery(UpsertSQL).WithArgs(
 		"120@g.us", "NUEVO", "SOCIO", "USDT", "10",
 		contiene{[]string{`"tasas":true`}},
-		contiene{[]string{`"porcentaje"`, `"deposito":2.5`, `"pago":1.5`}}, false,
+		contiene{[]string{`"porcentaje"`, `"deposito":2.5`, `"pago":1.5`, `"tipo":"D"`, `"polar_D":"+"`, `"polar_P":"-"`}}, false,
 	).WillReturnRows(rows)
 	writer := NewWriter(mock)
 	perfil, err := writer.Guardar(context.Background(), UpsertParams{
