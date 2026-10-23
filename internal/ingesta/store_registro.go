@@ -8,21 +8,23 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// insertImpactoSeguroSQL solo usa columnas que existen en impactos_raw. La
-// identidad incluye usuario, grupo y timestamp para que un reintento del
-// webhook no cuente dos veces el mismo impacto.
+// insertImpactoSeguroSQL usa un marcador distinto por columna y por comparación
+// del NOT EXISTS. Los casts evitan que PostgreSQL deduzca tipos inconsistentes
+// (SQLSTATE 42P08) al reutilizar parámetros en contextos varchar/text/bigint.
 const insertImpactoSeguroSQL = `
 INSERT INTO impactos_raw (
     hash_largo, hash_corto, instancia, usuario_raw, grupo_raw,
     nombre_push, caption, timestamp_msg, estado, created_at
 )
-SELECT $1, $2, $3, $4, $5, $6, $7, $8, 'RECIBIDO', CURRENT_TIMESTAMP
+SELECT
+    $1::varchar, $2::varchar, $3::varchar, $4::varchar, $5::varchar,
+    $6::varchar, $7::text, $8::bigint, $9::varchar, NOW()
 WHERE NOT EXISTS (
     SELECT 1 FROM impactos_raw
-    WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))
-      AND COALESCE(usuario_raw, '') = COALESCE($4, '')
-      AND COALESCE(grupo_raw, '') = COALESCE($5, '')
-      AND COALESCE(timestamp_msg, 0) = COALESCE($8, 0)
+    WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($10::varchar))
+      AND COALESCE(usuario_raw, '') = COALESCE($11::varchar, '')
+      AND COALESCE(grupo_raw, '') = COALESCE($12::varchar, '')
+      AND COALESCE(timestamp_msg, 0) = COALESCE($13::bigint, 0)
       AND eliminado_en IS NULL
 )`
 
@@ -34,7 +36,11 @@ INSERT INTO registros_raw (
     caption, timestamp_msg, es_imagen, instancia, url_imagen,
     conteo, estado, hash_imagen
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8, NULL, 1, 'RECIBIDO', $1)
+VALUES (
+    $1::varchar, $2::varchar, $3::varchar, $4::varchar, $5::varchar,
+    $6::text, $7::bigint, TRUE, $8::varchar, NULL,
+    1, 'RECIBIDO', $9::varchar
+)
 ON CONFLICT (hash_largo) DO NOTHING
 RETURNING COALESCE(conteo, 0), COALESCE(estado, 'RECIBIDO')`
 
@@ -52,24 +58,24 @@ SET conteo = 2,
 FROM (
     SELECT usuario_raw, grupo_raw, timestamp_msg
     FROM impactos_raw
-    WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))
+    WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1::varchar))
       AND eliminado_en IS NULL
     ORDER BY id ASC
     LIMIT 1 OFFSET 1
 ) AS s
-WHERE LOWER(TRIM(r.hash_largo)) = LOWER(TRIM($1))
+WHERE LOWER(TRIM(r.hash_largo)) = LOWER(TRIM($2::varchar))
   AND COALESCE(r.conteo, 0) < 2
 RETURNING r.conteo, COALESCE(r.estado, 'PROCESADO')`
 
 const selectRegistroSQL = `
 SELECT COALESCE(conteo, 0), COALESCE(estado, 'RECIBIDO')
-FROM registros_raw WHERE hash_largo = $1`
+FROM registros_raw WHERE hash_largo = $1::varchar`
 
 const claimJobSQL = `
 UPDATE registros_raw SET estado = 'EN_COLA'
-WHERE hash_largo = $1 AND estado IN ('RECIBIDO', 'FALLO', 'PROCESADO')`
+WHERE hash_largo = $1::varchar AND estado IN ('RECIBIDO', 'FALLO', 'PROCESADO')`
 
-const marcarEstadoSQL = `UPDATE registros_raw SET estado = $2 WHERE hash_largo = $1`
+const marcarEstadoSQL = `UPDATE registros_raw SET estado = $2::varchar WHERE hash_largo = $1::varchar`
 
 // Registrar inserta el impacto y mantiene el binomio en registros_raw con el
 // esquema real: impacto 1 INSERT conteo=1; impacto 2 UPDATE conteo=2 y
@@ -77,7 +83,9 @@ const marcarEstadoSQL = `UPDATE registros_raw SET estado = $2 WHERE hash_largo =
 func (r *Repository) Registrar(ctx context.Context, event Event) (Registro, error) {
 	if _, err := r.db.Exec(ctx, insertImpactoSeguroSQL,
 		event.HashLargo, event.HashCorto, event.Instancia, event.Usuario,
-		event.Grupo, event.NombrePush, event.Caption, event.Timestamp); err != nil {
+		event.Grupo, event.NombrePush, event.Caption, event.Timestamp,
+		string(EstadoRecibido),
+		event.HashLargo, event.Usuario, event.Grupo, event.Timestamp); err != nil {
 		return Registro{}, r.sqlFail("insert_impactos_raw",
 			fmt.Errorf("ingesta: guardar impacto: %w", err))
 	}
@@ -86,7 +94,8 @@ func (r *Repository) Registrar(ctx context.Context, event Event) (Registro, erro
 	var estado string
 	err := r.db.QueryRow(ctx, insertRegistroSQL,
 		event.HashLargo, event.HashCorto, event.Grupo, event.Usuario,
-		event.NombrePush, event.Caption, event.Timestamp, event.Instancia).
+		event.NombrePush, event.Caption, event.Timestamp, event.Instancia,
+		event.HashLargo).
 		Scan(&registro.Conteo, &estado)
 	switch {
 	case err == nil:
@@ -96,7 +105,7 @@ func (r *Repository) Registrar(ctx context.Context, event Event) (Registro, erro
 			fmt.Errorf("ingesta: guardar registro: %w", err))
 	}
 
-	err = r.db.QueryRow(ctx, updateRegistroParSQL, event.HashLargo).
+	err = r.db.QueryRow(ctx, updateRegistroParSQL, event.HashLargo, event.HashLargo).
 		Scan(&registro.Conteo, &estado)
 	if err == nil {
 		registro.Estado = Estado(estado)

@@ -10,33 +10,33 @@ import (
 
 const imagenExistenteSQL = `
 SELECT url_imagen FROM impactos_raw
-WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))
+WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1::varchar))
   AND url_imagen IS NOT NULL AND url_imagen <> ''
   AND eliminado_en IS NULL
 ORDER BY id ASC LIMIT 1`
 
 const actualizarImagenSQL = `
-UPDATE impactos_raw SET url_imagen = $2
-WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))
+UPDATE impactos_raw SET url_imagen = $2::text
+WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1::varchar))
   AND (url_imagen IS NULL OR url_imagen = '')`
 
 const actualizarRegistroImagenSQL = `
-UPDATE registros_raw SET url_imagen = $2
-WHERE hash_largo = $1 AND (url_imagen IS NULL OR url_imagen = '')`
+UPDATE registros_raw SET url_imagen = $2::text
+WHERE hash_largo = $1::varchar AND (url_imagen IS NULL OR url_imagen = '')`
 
 const contextoComprobanteSQL = `
 SELECT COALESCE(hash_corto, ''), COALESCE(instancia, ''), COALESCE(url_r2, ''),
        COALESCE(monto, 0), COALESCE(moneda, ''), COALESCE(banco, ''),
        COALESCE(titular, ''), COALESCE(referencia, ''), COALESCE(procesado_ia, FALSE)
 FROM comprobantes_raw
-WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))
+WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1::varchar))
 LIMIT 1`
 
 const contextoImpactosSQL = `
 SELECT COALESCE(grupo_raw, ''), COALESCE(caption, ''),
        COALESCE(timestamp_msg, 0), COALESCE(url_imagen, '')
 FROM impactos_raw
-WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))
+WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1::varchar))
   AND eliminado_en IS NULL
 ORDER BY id ASC`
 
