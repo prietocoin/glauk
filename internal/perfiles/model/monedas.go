@@ -72,8 +72,11 @@ func (m *Moneda) UnmarshalJSON(data []byte) error {
 	if tipo == "" {
 		tipo = def
 	}
-	depOp := primero(e.DepOp, e.PolarD, "+")
-	pagoOp := primero(e.PagoOp, e.PolarP, "-")
+	// polaridad es la forma histórica de una sola polaridad: describía el
+	// depósito y el pago era su contrapartida. Se usa solo si no llegó la
+	// separación canónica polar_D / polar_P.
+	depOp := primero(e.DepOp, e.PolarD, e.Polaridad, "+")
+	pagoOp := primero(e.PagoOp, e.PolarP, contraparte(depOp))
 	activo := true
 	if e.Activo != nil {
 		activo = *e.Activo
@@ -82,7 +85,9 @@ func (m *Moneda) UnmarshalJSON(data []byte) error {
 		Activo: activo, Porcentaje: Porcentajes{Deposito: deposito, Pago: pago},
 		Def: def, Deposito: deposito, DepOp: depOp, Pago: pago, PagoOp: pagoOp,
 		Tipo: tipo, PolarD: primero(e.PolarD, depOp, "+"),
-		PolarP: primero(e.PolarP, pagoOp, "-"), Polaridad: primero(e.Polaridad, e.PolarD, "+"),
+		// polaridad es el alias legacy de polar_D: si ambos llegan, manda el
+		// canónico para que el JSONB no quede con dos verdades distintas.
+		PolarP: primero(e.PolarP, pagoOp, "-"), Polaridad: primero(e.PolarD, e.Polaridad, depOp, "+"),
 		conflictos: conflictos, porcentajePresente: e.Porcentaje != nil,
 	}
 	return nil
@@ -127,4 +132,13 @@ func primero(valores ...string) string {
 		}
 	}
 	return ""
+}
+
+// contraparte devuelve el signo opuesto. Se usa para migrar la polaridad
+// histórica (una sola para depósito y pago) sin inventar una dirección nueva.
+func contraparte(signo string) string {
+	if strings.TrimSpace(signo) == "-" {
+		return "+"
+	}
+	return "-"
 }

@@ -21,10 +21,12 @@ func (m Moneda) Canonica() Moneda {
 	if m.Tipo == "" {
 		m.Tipo = m.Def
 	}
-	m.DepOp = primero(m.DepOp, m.PolarD, "+")
-	m.PagoOp = primero(m.PagoOp, m.PolarP, "-")
-	m.PolarD = primero(m.PolarD, m.DepOp, "+")
-	m.PolarP = primero(m.PolarP, m.PagoOp, "-")
-	m.Polaridad = primero(m.Polaridad, m.PolarD, "+")
+	depOp := primero(m.DepOp, m.PolarD, m.Polaridad, "+")
+	pagoOp := primero(m.PagoOp, m.PolarP, contraparte(depOp))
+	m.DepOp = depOp
+	m.PagoOp = pagoOp
+	m.PolarD = primero(m.PolarD, depOp, "+")
+	m.PolarP = primero(m.PolarP, pagoOp, "-")
+	m.Polaridad = primero(m.PolarD, m.Polaridad, depOp, "+")
 	return m
 }

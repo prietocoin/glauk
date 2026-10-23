@@ -60,6 +60,17 @@ SET mostrar = jsonb_set(
   '{tasas}', to_jsonb($1::boolean))
 WHERE UPPER(BTRIM(nombre)) = UPPER(BTRIM($2))` + returningPerfil
 
+// NormalizarMonedasSQL persiste la forma canónica de una fila histórica. El
+// tercer argumento es el JSONB tal como se leyó: la condición evita pisar una
+// escritura concurrente entre el SELECT del lector y este UPDATE. Si la fila ya
+// cambió, afecta 0 filas y el lector devuelve igualmente la vista canonicalizada
+// en memoria, porque el siguiente guardado del socio persistirá el superset.
+const NormalizarMonedasSQL = `
+UPDATE perfiles_glaukov
+SET monedas = $1::jsonb
+WHERE UPPER(BTRIM(nombre)) = UPPER(BTRIM($2))
+  AND COALESCE(monedas, '{}'::jsonb) = $3::jsonb`
+
 // DeleteSQL devuelve el control de filas afectadas al writer.
 const DeleteSQL = `DELETE FROM perfiles_glaukov WHERE UPPER(BTRIM(nombre)) = UPPER(BTRIM($1))`
 

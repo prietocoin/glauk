@@ -83,6 +83,6 @@ func (w *Writer) queryOne(ctx context.Context, sql string, args ...any) (model.P
 		}
 		return model.Perfil{}, pgx.ErrNoRows
 	}
-	perfil, _, err := scanPerfil(rows)
+	perfil, _, _, err := scanPerfil(rows)
 	return perfil, err
 }

@@ -163,6 +163,26 @@ func TestCanonicaConservaPrioridad(t *testing.T) {
 	}
 }
 
+// TestMonedaMigraPolaridadLegacy cubre las filas históricas que solo traían una
+// polaridad. Esa polaridad describía el depósito; el pago es su contrapartida.
+func TestMonedaMigraPolaridadLegacy(t *testing.T) {
+	var moneda Moneda
+	if err := json.Unmarshal([]byte(`{"polaridad":"-","porcentaje":{"deposito":1,"pago":2}}`), &moneda); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if moneda.PolarD != "-" || moneda.PolarP != "+" || moneda.Polaridad != "-" || moneda.Tipo != "D" {
+		t.Fatalf("migración legacy = %+v", moneda)
+	}
+
+	var explicita Moneda
+	if err := json.Unmarshal([]byte(`{"polar_D":"+","polaridad":"-"}`), &explicita); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if explicita.PolarD != "+" || explicita.PolarP != "-" || explicita.Polaridad != "+" {
+		t.Fatalf("polar_D debe mandar sobre polaridad: %+v", explicita)
+	}
+}
+
 func TestMonedasConflictosOrdenados(t *testing.T) {
 	var monedas Monedas
 	raw := `{"usd":{"porcentaje":{"deposito":1},"deposito":9},"ars":{"porcentaje":{"pago":2},"pago":8}}`

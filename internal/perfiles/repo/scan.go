@@ -15,8 +15,10 @@ type scanner interface {
 
 // scanPerfil decodifica mostrar y monedas con el codec tolerante. Devuelve los
 // conflictos de H-01 junto al perfil para que el lector emita el WARN con el
-// nombre del socio, que el modelo por sí solo no conoce.
-func scanPerfil(row scanner) (model.Perfil, []model.Conflicto, error) {
+// nombre del socio, que el modelo por sí solo no conoce. También devuelve el
+// JSONB crudo de monedas: el lector lo usa para detectar filas históricas que
+// aún no declaran tipo/polar_D/polar_P y persistir su forma canónica.
+func scanPerfil(row scanner) (model.Perfil, []model.Conflicto, []byte, error) {
 	var perfil model.Perfil
 	var mostrar, monedas []byte
 	err := row.Scan(
@@ -30,19 +32,19 @@ func scanPerfil(row scanner) (model.Perfil, []model.Conflicto, error) {
 		&perfil.Herencia,
 	)
 	if err != nil {
-		return model.Perfil{}, nil, err
+		return model.Perfil{}, nil, nil, err
 	}
 	if len(mostrar) > 0 {
 		if err := json.Unmarshal(mostrar, &perfil.Mostrar); err != nil {
-			return model.Perfil{}, nil, fmt.Errorf("mostrar inválido: %w", err)
+			return model.Perfil{}, nil, nil, fmt.Errorf("mostrar inválido: %w", err)
 		}
 	}
 	perfil.Monedas = model.Monedas{}
 	if len(monedas) > 0 {
 		if err := json.Unmarshal(monedas, &perfil.Monedas); err != nil {
-			return model.Perfil{}, nil, fmt.Errorf("monedas inválidas: %w", err)
+			return model.Perfil{}, nil, nil, fmt.Errorf("monedas inválidas: %w", err)
 		}
 	}
 	perfil.Activo = perfil.Mostrar.Tasas
-	return perfil, perfil.Monedas.Conflictos(), nil
+	return perfil, perfil.Monedas.Conflictos(), monedas, nil
 }

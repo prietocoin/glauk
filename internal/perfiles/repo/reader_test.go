@@ -36,6 +36,9 @@ func TestReaderListarDecodificaSuperset(t *testing.T) {
 		[]byte(`{"tasas":true,"dashboard":true}`), monedas, false,
 	)
 	mock.ExpectQuery(ListarSQL).WillReturnRows(rows)
+	mock.ExpectExec(NormalizarMonedasSQL).
+		WithArgs(pgxmock.AnyArg(), "FUNDABLOCK", pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	reader := NewReader(mock, loggerRepo(&buf))
 	perfiles, err := reader.Listar(context.Background())
 	if err != nil {
@@ -116,5 +119,122 @@ func TestEncodeMonedasCanonico(t *testing.T) {
 	}
 	if salida["ARS"]["deposito"] != 2.5 || salida["ARS"]["pago"] != 1.5 {
 		t.Fatalf("valores programáticos perdidos: %s", data)
+	}
+}
+
+func TestMonedasIncompletas(t *testing.T) {
+	casos := []struct {
+		nombre string
+		raw    string
+		quiero bool
+	}{
+		{"solo tasas", `{"ARS":{"porcentaje":{"deposito":2.5,"pago":1.5}}}`, true},
+		{"superset", `{"ARS":{"activo":true,"tipo":"D","polar_D":"+","polar_P":"-"}}`, false},
+		{"tipo vacío", `{"ARS":{"activo":true,"tipo":"","polar_D":"+","polar_P":"-"}}`, true},
+		{"sin polar_P", `{"ARS":{"activo":true,"tipo":"D","polar_D":"+"}}`, true},
+		{"inactiva incompleta", `{"ARS":{"activo":false}}`, false},
+		{"activo omitido", `{"ARS":{"porcentaje":{"deposito":1}}}`, true},
+		{"vacío", `{}`, false},
+		{"nulo", ``, false},
+	}
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
+			if got := monedasIncompletas([]byte(caso.raw)); got != caso.quiero {
+				t.Fatalf("monedasIncompletas(%s) = %v, quiero %v", caso.raw, got, caso.quiero)
+			}
+		})
+	}
+}
+
+func TestReaderListarNoReescribeMonedasCompletas(t *testing.T) {
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+	completas := []byte(`{"ARS":{"activo":true,"tipo":"P","polar_D":"-","polar_P":"+"}}`)
+	rows := pgxmock.NewRows(columnasPerfil).AddRow(
+		"120@g.us", "NELSY", "SOCIO", "USDT", "0",
+		[]byte(`{"tasas":true}`), completas, false,
+	)
+	// Sin ExpectExec: el lector no debe reescribir una fila ya canónica.
+	mock.ExpectQuery(ListarSQL).WillReturnRows(rows)
+	perfiles, err := NewReader(mock, nil).Listar(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	moneda := perfiles[0].Monedas["ARS"]
+	if moneda.Tipo != "P" || moneda.PolarD != "-" || moneda.PolarP != "+" {
+		t.Fatalf("moneda = %+v", moneda)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReaderPorNombreNormalizaMonedasHistoricas(t *testing.T) {
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+	historicas := []byte(`{"COP":{"activo":true,"porcentaje":{"deposito":2.5,"pago":1.5}}}`)
+	rows := pgxmock.NewRows(columnasPerfil).AddRow(
+		"121@g.us", "NELSY", "SOCIO", "COP", "0",
+		[]byte(`{"tasas":true}`), historicas, false,
+	)
+	mock.ExpectQuery(PorNombreSQL).WithArgs("NELSY").WillReturnRows(rows)
+	// El payload persistido debe ser el superset canónico, con el porcentaje
+	// original intacto, y el JSONB crudo como guarda contra escrituras
+	// concurrentes.
+	mock.ExpectExec(NormalizarMonedasSQL).
+		WithArgs(
+			contiene{[]string{`"tipo":"D"`, `"polar_D":"+"`, `"polar_P":"-"`, `"deposito":2.5`, `"pago":1.5`}},
+			"NELSY",
+			historicas,
+		).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	perfil, err := NewReader(mock, nil).PorNombre(context.Background(), "NELSY")
+	if err != nil {
+		t.Fatal(err)
+	}
+	moneda := perfil.Monedas["COP"]
+	if moneda.Tipo != "D" || moneda.PolarD != "+" || moneda.PolarP != "-" {
+		t.Fatalf("moneda no canonicalizada: %+v", moneda)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReaderPorNombreSanitizaAunqueFalleElUpdate(t *testing.T) {
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+	var buf bytes.Buffer
+	historicas := []byte(`{"COP":{"activo":true}}`)
+	rows := pgxmock.NewRows(columnasPerfil).AddRow(
+		"121@g.us", "NELSY", "SOCIO", "COP", "0",
+		[]byte(`{"tasas":true}`), historicas, false,
+	)
+	mock.ExpectQuery(PorNombreSQL).WithArgs("NELSY").WillReturnRows(rows)
+	mock.ExpectExec(NormalizarMonedasSQL).
+		WithArgs(pgxmock.AnyArg(), "NELSY", pgxmock.AnyArg()).
+		WillReturnError(errors.New("db caída"))
+	perfil, err := NewReader(mock, loggerRepo(&buf)).PorNombre(context.Background(), "NELSY")
+	if err != nil {
+		t.Fatalf("la lectura no debe fallar por el saneamiento: %v", err)
+	}
+	moneda := perfil.Monedas["COP"]
+	if moneda.Tipo != "D" || moneda.PolarD != "+" || moneda.PolarP != "-" {
+		t.Fatalf("moneda no canonicalizada: %+v", moneda)
+	}
+	if !strings.Contains(buf.String(), "normalizar monedas") {
+		t.Fatalf("WARN no emitido: %q", buf.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
