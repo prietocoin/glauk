@@ -50,6 +50,10 @@ func run(parent context.Context) error {
 	if err := registerRoutes(app, deps); err != nil {
 		return fmt.Errorf("registrar rutas: %w", err)
 	}
+	if deps.Ingesta != nil {
+		deps.Ingesta.Start(ctx)
+		defer deps.Ingesta.Close()
+	}
 
 	errCh := startListening(app, listenAddress(cfg.Port))
 	log.Info("glauk iniciado", "port", cfg.Port,

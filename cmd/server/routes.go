@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	comprobanteshttp "glauk/internal/comprobantes/http"
+	"glauk/internal/ingesta"
 	perfileshttp "glauk/internal/perfiles/http"
 	"glauk/internal/platform/httpx"
 	reporteshttp "glauk/internal/reportes/http"
@@ -58,6 +59,9 @@ func registerCanonical(app *fiber.App, deps *Dependencies) error {
 	}
 	reporteshttp.RegisterCanonical(app, deps.Reportes, deps.Guard)
 	comprobanteshttp.RegisterAdmin(app, deps.Comprobantes)
+	if err := ingesta.Register(app, deps.Ingesta); err != nil {
+		return err
+	}
 	return nil
 }
 

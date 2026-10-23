@@ -28,6 +28,7 @@ func (c *Config) validate() error {
 	c.validateHTTP(&errs)
 	c.validateReports(&errs)
 	c.validateHOO(&errs)
+	c.validateIngesta(&errs)
 	if c.AppEnv == "production" {
 		c.validateProduction(&errs)
 	}

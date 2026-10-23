@@ -20,6 +20,7 @@ type Config struct {
 	Admin           AdminConfig
 	HOO             HOOConfig
 	Tenants         TenantConfig
+	Ingesta         IngestaConfig
 	Log             LogConfig
 }
 type DBConfig struct {

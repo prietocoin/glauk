@@ -113,6 +113,10 @@ func build(l lookupFunc, appEnv string) (*Config, Errors) {
 	readInt(l, "REPORT_RATE_LIMIT_PER_MINUTE", 60, &cfg.Report.RatePerMinute, &errs)
 
 	readDuration(l, "HOO_TIMEOUT", 10*time.Second, &cfg.HOO.Timeout, &errs)
+	cfg.Ingesta = buildIngesta(l, &errs)
+	if cfg.Ingesta.Gemini.APIKey != "" {
+		cfg.Ingesta.Gemini.addKey(cfg.Ingesta.Gemini.APIKey)
+	}
 	cfg.DB.sourceConfigured = hasDBConfig(l)
 	return cfg, errs
 }

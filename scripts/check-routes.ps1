@@ -15,6 +15,8 @@ $Canonical = @(
     New-Route 'GET' '/health'
     New-Route 'GET' '/ready'
 
+    New-Route 'POST' '/api/v1/webhooks/evolution'
+
     New-Route 'GET' '/api/v1/tasas/monitor'
     New-Route 'GET' '/api/v1/tasas/socios'
     New-Route 'GET' '/api/v1/tasas/hoo-borrador'

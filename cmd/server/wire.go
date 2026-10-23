@@ -11,6 +11,7 @@ import (
 	comprobanteshttp "glauk/internal/comprobantes/http"
 	comprobantesservice "glauk/internal/comprobantes/service"
 	comprobantesstore "glauk/internal/comprobantes/store"
+	"glauk/internal/ingesta"
 	perfileshttp "glauk/internal/perfiles/http"
 	perfilesrepo "glauk/internal/perfiles/repo"
 	perfilesservice "glauk/internal/perfiles/service"
@@ -37,6 +38,7 @@ type Dependencies struct {
 	Comprobantes comprobanteshttp.Deps
 	Reportes     *reporteshttp.Handler
 	Guard        fiber.Handler
+	Ingesta      *ingesta.Module
 }
 
 // wire ensambla repositorios, servicios, adaptadores y handlers. Es la única
@@ -79,5 +81,6 @@ func wire(pool *pgxpool.Pool, evo *evolution.Client, cfg *config.Config,
 		Comprobantes: comprobanteshttp.NewDeps(comprobantesService, cfg),
 		Reportes:     reporteshttp.NewHandler(reportesModule),
 		Guard:        httpx.RequireAPIKey(cfg),
+		Ingesta:      ingesta.NewModule(cfg, pool, evo, log),
 	}, nil
 }
