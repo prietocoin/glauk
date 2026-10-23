@@ -18,7 +18,6 @@ type MediaFetcher interface {
 // pipeline a construir URLs a mano cuando el dominio público no está definido.
 type ImageStore interface {
 	Put(ctx context.Context, key string, data []byte, contentType string) (string, error)
-	Get(ctx context.Context, key string) ([]byte, string, error)
 	PublicURL(key string) string
 }
 

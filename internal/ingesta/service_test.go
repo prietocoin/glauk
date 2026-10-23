@@ -63,9 +63,6 @@ func (f fakeMedia) DownloadMedia(context.Context, string, json.RawMessage,
 }
 
 type fakeImages struct {
-	data   []byte
-	mime   string
-	getErr error
 	putErr error
 	putURL string
 	puts   int
@@ -80,9 +77,6 @@ func (f *fakeImages) Put(_ context.Context, key string, _ []byte, _ string) (str
 		return f.putURL, nil
 	}
 	return "https://cdn.example/" + key, nil
-}
-func (f *fakeImages) Get(context.Context, string) ([]byte, string, error) {
-	return f.data, f.mime, f.getErr
 }
 func (f *fakeImages) PublicURL(key string) string { return key }
 
@@ -206,7 +200,7 @@ func TestProcesarReutilizaExtraccion(t *testing.T) {
 func TestProcesarFallaSinImagen(t *testing.T) {
 	store := &fakeStore{}
 	service := testService(store, fakeMedia{err: errors.New("sin media")},
-		&fakeImages{getErr: errors.New("sin r2")}, &fakeAI{}, &fakeLiq{})
+		&fakeImages{}, &fakeAI{}, &fakeLiq{})
 	job := Job{Event: Event{
 		HashLargo: "hash", Key: json.RawMessage(`{"id":"1"}`), Message: json.RawMessage(`{}`),
 	}}

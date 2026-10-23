@@ -16,7 +16,6 @@ import (
 )
 
 const maxErrorBody = 4 << 10
-const maxObjectBytes = 32 << 20
 
 // Client guarda credenciales y resuelve objetos dentro de un único bucket.
 type Client struct {
@@ -73,31 +72,6 @@ func (c *Client) Put(ctx context.Context, key string, data []byte, contentType s
 	}
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxErrorBody))
 	return c.PublicURL(key), nil
-}
-
-// Get descarga un objeto; se usa como respaldo cuando Evolution no entrega
-// el binario pero la imagen ya estaba en R2.
-func (c *Client) Get(ctx context.Context, key string) ([]byte, string, error) {
-	if !c.Configured() {
-		return nil, "", fmt.Errorf("r2: credenciales o bucket incompletos")
-	}
-	resp, err := c.do(ctx, http.MethodGet, key, nil, "")
-	if err != nil {
-		return nil, "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, "", statusError("descargar", resp)
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxObjectBytes))
-	if err != nil {
-		return nil, "", fmt.Errorf("r2: leer objeto: %w", err)
-	}
-	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = http.DetectContentType(data)
-	}
-	return data, contentType, nil
 }
 
 // PublicURL conserva la misma regla del servicio Node: dominio público si

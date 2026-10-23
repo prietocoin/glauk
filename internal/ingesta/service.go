@@ -92,17 +92,20 @@ func (s *Service) Procesar(ctx context.Context, job Job) error {
 	var image []byte
 	var mimeType string
 	if needExtraction {
-		image, mimeType, err = s.obtenerImagen(ctx, job)
+		image, mimeType, err = s.obtenerImagen(ctx, job, instancia)
 		if err != nil {
 			return err
 		}
-		if strings.TrimSpace(url) == "" || !strings.HasPrefix(url, "http") {
-			key := objectPrefix + job.HashLargo + ".jpg"
-			url, err = s.images.Put(ctx, key, image, mimeType)
-			if err != nil {
-				return fmt.Errorf("ingesta: subir a R2: %w", err)
-			}
+		s.log.Info("ingesta: imagen descargada de evolution",
+			"hash", job.HashLargo, "bytes", len(image))
+
+		key := objectPrefix + job.HashLargo + ".jpg"
+		url, err = s.images.Put(ctx, key, image, mimeType)
+		if err != nil {
+			return fmt.Errorf("ingesta: subir a R2: %w", err)
 		}
+		s.log.Info("ingesta: imagen subida a r2", "hash", job.HashLargo, "url", url)
+
 		if err := s.store.ActualizarImagen(ctx, job.HashLargo, url); err != nil {
 			return err
 		}
@@ -119,6 +122,7 @@ func (s *Service) Procesar(ctx context.Context, job Job) error {
 		if err != nil {
 			return fmt.Errorf("ingesta: extraer con Gemini: %w", err)
 		}
+		s.log.Info("ingesta: extraccion gemini completada", "hash", job.HashLargo)
 		if err := s.store.GuardarExtraccion(ctx, job.HashLargo, instancia, url, extraccion); err != nil {
 			return err
 		}
@@ -146,27 +150,24 @@ func (s *Service) Procesar(ctx context.Context, job Job) error {
 	return s.store.MarcarEstado(ctx, job.HashLargo, EstadoProcesado)
 }
 
-func (s *Service) obtenerImagen(ctx context.Context, job Job) ([]byte, string, error) {
-	var lastErr error
-	if len(job.Key) > 0 && len(job.Message) > 0 && s.media != nil {
-		data, mimeType, err := s.media.DownloadMedia(ctx, job.Instancia, job.Key, job.Message)
-		if err == nil && len(data) > 0 {
-			return data, mimeType, nil
-		}
-		lastErr = err
+func (s *Service) obtenerImagen(ctx context.Context, job Job, instancia string) ([]byte, string, error) {
+	if s.media == nil {
+		return nil, "", errors.New("ingesta: media fetcher de Evolution no configurado")
 	}
-	if s.images != nil {
-		key := objectPrefix + job.HashLargo + ".jpg"
-		data, mimeType, err := s.images.Get(ctx, key)
-		if err == nil && len(data) > 0 {
-			return data, mimeType, nil
-		}
-		lastErr = err
+	if len(job.Key) == 0 || len(job.Message) == 0 {
+		return nil, "", errors.New("ingesta: el job no tiene key/message de Evolution")
 	}
-	if lastErr == nil {
-		lastErr = errors.New("sin origen de imagen")
+	data, mimeType, err := s.media.DownloadMedia(ctx, instancia, job.Key, job.Message)
+	if err != nil {
+		return nil, "", fmt.Errorf("ingesta: obtener imagen de Evolution: %w", err)
 	}
-	return nil, "", fmt.Errorf("ingesta: obtener imagen: %w", lastErr)
+	if len(data) == 0 {
+		return nil, "", errors.New("ingesta: Evolution devolvió una imagen vacía")
+	}
+	if strings.TrimSpace(mimeType) == "" {
+		mimeType = "image/jpeg"
+	}
+	return data, mimeType, nil
 }
 
 // Fallar deja el registro en FALLO para que un reenvío del webhook lo
