@@ -25,8 +25,8 @@ func TestDeleteMarksImpactosInSameTransaction(t *testing.T) {
 	mock := newMock(t)
 	mock.ExpectBeginTx(pgx.TxOptions{})
 	mock.ExpectQuery(lockComprobanteSQL).WithArgs("HASH").
-		WillReturnRows(pgxmock.NewRows([]string{"monto", "moneda", "banco", "referencia", "titular"}).
-			AddRow(float64(0), nil, nil, nil, nil))
+		WillReturnRows(pgxmock.NewRows([]string{"monto", "moneda", "banco", "referencia", "titular", "caption"}).
+			AddRow(float64(0), nil, nil, nil, nil, ""))
 	mock.ExpectExec(deleteLiquidacionSQL).WithArgs("HASH").
 		WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	mock.ExpectExec(markImpactosSQL).WithArgs("HASH").
@@ -52,8 +52,8 @@ func TestDeleteRollsBackWhenMarkImpactosFails(t *testing.T) {
 	mock := newMock(t)
 	mock.ExpectBeginTx(pgx.TxOptions{})
 	mock.ExpectQuery(lockComprobanteSQL).WithArgs("HASH").
-		WillReturnRows(pgxmock.NewRows([]string{"monto", "moneda", "banco", "referencia", "titular"}).
-			AddRow(float64(0), nil, nil, nil, nil))
+		WillReturnRows(pgxmock.NewRows([]string{"monto", "moneda", "banco", "referencia", "titular", "caption"}).
+			AddRow(float64(0), nil, nil, nil, nil, ""))
 	mock.ExpectExec(deleteLiquidacionSQL).WithArgs("HASH").
 		WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	mock.ExpectExec(markImpactosSQL).WithArgs("HASH").

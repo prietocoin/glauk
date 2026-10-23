@@ -81,6 +81,7 @@ func (l *LiquidadorAdapter) Liquidar(ctx context.Context,
 			Monto:      in.Monto,
 			Moneda:     moneda,
 			TipoManual: tipo,
+			Caption:    in.Caption,
 			IDTasa:     lote.IDTasa,
 		},
 		perfil1, perfil2,
@@ -89,8 +90,11 @@ func (l *LiquidadorAdapter) Liquidar(ctx context.Context,
 	)
 
 	return LiquidacionResult{
-		Snapshot:    snapshot,
-		TipoManual:  tipo,
+		Snapshot: snapshot,
+		// TipoManual refleja la naturaleza efectivamente calculada. Para IRIS
+		// en COP puede haber pasado de A a D por falta de abono en el caption,
+		// y comprobantes_final no debe conservar la etiqueta descartada.
+		TipoManual:  calc.OperationNature(snapshot.TipoOp1),
 		Rol1:        rolOf(perfil1),
 		Rol2:        rolOf(perfil2),
 		MonedaBase1: baseOf(perfil1),

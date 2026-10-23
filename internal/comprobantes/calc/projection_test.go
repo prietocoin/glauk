@@ -156,12 +156,12 @@ func TestProjectionHelpers(t *testing.T) {
 		t.Fatal("resolveSocio2")
 	}
 	conf := CurrencyConfig{Tipo: "P"}
-	if operationLetter(SourceRow{RolSocio1: "proveedor"}, conf, "X", "USDT", "COP") != "P" ||
-		operationLetter(SourceRow{RolSocio1: "PROVEEDOR", TipoOp1: socioPtr("D-COP")}, conf, "X", "USDT", "COP") != "D" ||
-		operationLetter(SourceRow{RolSocio1: "PROVEEDOR", TipoOp1: socioPtr("A-COP")}, conf, "X", "USDT", "COP") != "P" ||
-		operationLetter(SourceRow{RolSocio1: "SOCIO", TipoOp1: socioPtr("P-COP")}, conf, "X", "USDT", "COP") != "P" ||
-		operationLetter(SourceRow{RolSocio1: "SOCIO", MonedaSocio1: "COP"}, conf, "FUNDA", "COP", "COP") != "A" ||
-		operationLetter(SourceRow{RolSocio1: "SOCIO", MonedaSocio1: "COP"}, CurrencyConfig{}, "GENERAL", "COP", "COP") != "D" {
+	if operationLetter(SourceRow{RolSocio1: "proveedor"}, conf, "X", "", "USDT", "COP") != "P" ||
+		operationLetter(SourceRow{RolSocio1: "PROVEEDOR", TipoOp1: socioPtr("D-COP")}, conf, "X", "", "USDT", "COP") != "D" ||
+		operationLetter(SourceRow{RolSocio1: "PROVEEDOR", TipoOp1: socioPtr("A-COP")}, conf, "X", "", "USDT", "COP") != "P" ||
+		operationLetter(SourceRow{RolSocio1: "SOCIO", TipoOp1: socioPtr("P-COP")}, conf, "X", "", "USDT", "COP") != "P" ||
+		operationLetter(SourceRow{RolSocio1: "SOCIO", MonedaSocio1: "COP"}, conf, "FUNDA", "", "COP", "COP") != "A" ||
+		operationLetter(SourceRow{RolSocio1: "SOCIO", MonedaSocio1: "COP"}, CurrencyConfig{}, "GENERAL", "", "COP", "COP") != "D" {
 		t.Fatal("operationLetter")
 	}
 	if domain.NormalizeCurrency(" usdt ", "") != "USDT" {

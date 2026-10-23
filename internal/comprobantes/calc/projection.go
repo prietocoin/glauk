@@ -28,7 +28,7 @@ func ProjectRow(row SourceRow, fundda Profile) domain.Comprobante {
 	profile2 := DecodeProfile(row.Socio2Row)
 	cfg1 := ResolveLiveSocioConfig(socio1, profile1, divisa, fundda, monedaSocio1)
 	cfg2 := ResolveLiveSocioConfig(socio2Nombre, profile2, divisa, fundda, monedaSocio2)
-	tipoLetra := operationLetter(row, cfg1.Conf, socio1, monedaSocio1, divisa)
+	tipoLetra := operationLetter(row, cfg1.Conf, socio1, socio2Nombre, monedaSocio1, divisa)
 	tipoTag := tipoLetra + "-" + divisa
 	signo1, signo2 := SideSigns(cfg1, cfg2, tipoLetra, socio1)
 	tasa1, monto1, me1, tasa2, monto2, me2 := CalculateAmounts(
@@ -71,22 +71,33 @@ func resolveSocio2(row SourceRow, liquidado bool) *string {
 	return &trimmed
 }
 
-func operationLetter(row SourceRow, conf CurrencyConfig, socio1, monedaSocio1, divisa string) string {
+func operationLetter(row SourceRow, conf CurrencyConfig, socio1, socio2, monedaSocio1, divisa string) string {
 	rol := domain.NormalizeCurrency(row.RolSocio1, "SOCIO")
 	guardada := savedLetter(row.TipoOp1)
-	if rol == "PROVEEDOR" {
-		if guardada != "" && guardada != "A" {
-			return guardada
-		}
-		return domain.NormalizeCurrency(conf.Tipo, "D")
+	var candidata string
+	switch {
+	case rol == "PROVEEDOR" && guardada != "" && guardada != "A":
+		candidata = guardada
+	case rol == "PROVEEDOR":
+		candidata = domain.NormalizeCurrency(conf.Tipo, "D")
+	case guardada != "":
+		candidata = guardada
+	case monedaSocio1 == divisa && socio1 != "GENERAL":
+		candidata = "A"
+	default:
+		candidata = domain.NormalizeCurrency(conf.Tipo, "D")
 	}
-	if guardada != "" {
-		return guardada
+	// La proyección viva aplica la misma regla que el snapshot: un "A" guardado
+	// o inferido por coincidencia de moneda no se procesa como abono para IRIS
+	// en COP si el caption no lo declara.
+	return NatureForAbono(candidata, socio1, socio2, divisa, captionOf(row), conf)
+}
+
+func captionOf(row SourceRow) string {
+	if row.Caption == nil {
+		return ""
 	}
-	if monedaSocio1 == divisa && socio1 != "GENERAL" {
-		return "A"
-	}
-	return domain.NormalizeCurrency(conf.Tipo, "D")
+	return *row.Caption
 }
 
 func savedLetter(value *string) string {

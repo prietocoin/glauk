@@ -19,6 +19,9 @@ type RawComprobante struct {
 	Banco      *string
 	Referencia *string
 	Titular    *string
+	// Caption alimenta la regla de abono explícito de IRIS en COP: la
+	// recalculación de una edición debe ver el mismo texto que vio la ingesta.
+	Caption string
 }
 
 // RawUpdate contiene los valores que se escribirán en comprobantes_raw.
@@ -31,7 +34,7 @@ type RawUpdate struct {
 }
 
 const lockComprobanteSQL = `
-SELECT COALESCE(monto, 0), moneda, banco, referencia, titular
+SELECT COALESCE(monto, 0), moneda, banco, referencia, titular, COALESCE(caption, '')
 FROM comprobantes_raw
 WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))
 FOR UPDATE`
@@ -98,7 +101,7 @@ func trimmedOrEmpty(value *string) string {
 func (t *txStore) LockComprobante(ctx context.Context, hash string) (RawComprobante, error) {
 	var row RawComprobante
 	err := t.tx.QueryRow(ctx, lockComprobanteSQL, hash).Scan(
-		&row.Monto, &row.Moneda, &row.Banco, &row.Referencia, &row.Titular,
+		&row.Monto, &row.Moneda, &row.Banco, &row.Referencia, &row.Titular, &row.Caption,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return row, domain.ErrComprobanteNotFound

@@ -45,7 +45,7 @@ func (s *Service) Update(ctx context.Context, hash string, input dto.UpdateInput
 		if err := tx.UpdateComprobante(ctx, target, update); err != nil {
 			return err
 		}
-		liq, err = s.buildSnapshot(ctx, tx, target, update, input, actual)
+		liq, err = s.buildSnapshot(ctx, tx, target, update, input, actual, current.Caption)
 		if err != nil {
 			return err
 		}
