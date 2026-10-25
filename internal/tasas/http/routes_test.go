@@ -51,6 +51,32 @@ func (baseFalsa) Exec(context.Context, string, ...any) (pgconn.CommandTag, error
 	return pgconn.NewCommandTag("DELETE 1"), nil
 }
 
+// txFalsa permite que el smoke test de guardar-lote recorra la transacción con
+// advisory lock sin una base real. Solo se usan Exec, Query, QueryRow, Commit y
+// Rollback; el resto del contrato pgx.Tx queda embebido.
+type txFalsa struct {
+	pgx.Tx
+}
+
+func (txFalsa) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	return (baseFalsa{}).Exec(ctx, sql, args...)
+}
+
+func (txFalsa) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	return (baseFalsa{}).Query(ctx, sql, args...)
+}
+
+func (txFalsa) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	return (baseFalsa{}).QueryRow(ctx, sql, args...)
+}
+
+func (txFalsa) Commit(context.Context) error   { return nil }
+func (txFalsa) Rollback(context.Context) error { return nil }
+
+func (baseFalsa) BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error) {
+	return txFalsa{}, nil
+}
+
 type borradorFalso struct{}
 
 func (borradorFalso) Obtener(context.Context) (hoo.Cambios, error) {

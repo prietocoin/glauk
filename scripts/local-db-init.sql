@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS tasas_glaukov (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS ux_tasas_glaukov_id_tasa
+    ON tasas_glaukov (lower(btrim(id_tasa)))
+    WHERE id_tasa IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS perfiles_glaukov (
     id            BIGSERIAL PRIMARY KEY,
     id_grupo      TEXT NOT NULL DEFAULT '',
@@ -66,6 +70,15 @@ CREATE TABLE IF NOT EXISTS impactos_raw (
     instancia     TEXT NOT NULL DEFAULT 'glauk',
     eliminado_en  TIMESTAMPTZ
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_impactos_raw_dedupe
+    ON impactos_raw (
+        COALESCE(lower(btrim(hash_largo)), ''),
+        COALESCE(usuario_raw, ''),
+        COALESCE(grupo_raw, ''),
+        COALESCE(timestamp_msg, 0)
+    )
+    WHERE eliminado_en IS NULL;
 
 INSERT INTO tasas_glaukov (id_tasa, tasas)
 VALUES ('T001', '{"USD":1,"USDT":1,"COP":4000,"ARS":1250.5,"PYUSD":1.2}'::jsonb)

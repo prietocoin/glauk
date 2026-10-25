@@ -60,7 +60,7 @@ func TestEscrituraDeLotes(t *testing.T) {
 	if err != nil || lote.IDTasa != "T061" || len(lote.Tasas) != 1 {
 		t.Fatalf("InsertLote devolvió %+v, %v", lote, err)
 	}
-	mock.ExpectExec(`DELETE FROM tasas_glaukov WHERE LOWER(id_tasa) = LOWER($1)`).WithArgs("T060").WillReturnResult(pgconn.NewCommandTag("DELETE 1"))
+	mock.ExpectExec(`DELETE FROM tasas_glaukov WHERE LOWER(BTRIM(id_tasa)) = LOWER(BTRIM($1))`).WithArgs("T060").WillReturnResult(pgconn.NewCommandTag("DELETE 1"))
 	if borrado, err := DeleteLote(context.Background(), mock, "T060"); err != nil || !borrado {
 		t.Fatalf("DeleteLote debía informar el borrado: %v, %v", borrado, err)
 	}

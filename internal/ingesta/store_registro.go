@@ -8,29 +8,29 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// insertImpactoSeguroSQL usa un marcador distinto por columna y por comparación
-// del NOT EXISTS. Los casts evitan que PostgreSQL deduzca tipos inconsistentes
-// (SQLSTATE 42P08) al reutilizar parámetros en contextos varchar/text/bigint.
+// insertImpactoSeguroSQL usa la clave única parcial de impactos_raw para que
+// dos entregas HTTP simultáneas del mismo mensaje no puedan insertar dos filas.
+// La clave replica la identidad del binomio: hash canónico, usuario, grupo y
+// timestamp, solo para impactos vigentes (eliminado_en IS NULL).
 //
-// La comparación de impactos_raw sigue siendo case-insensitive porque esa tabla
-// conserva evidencia histórica en mayúsculas. registros_raw se sanea al arrancar
-// y sus búsquedas usan igualdad exacta.
+// La comparación de impactos_raw sigue siendo case-insensitive en las lecturas
+// históricas porque esa tabla conserva evidencia en mayúsculas. El INSERT usa
+// lower(btrim(...)) para que la unicidad también lo sea.
 const insertImpactoSeguroSQL = `
 INSERT INTO impactos_raw (
     hash_largo, hash_corto, instancia, usuario_raw, grupo_raw,
     nombre_push, caption, timestamp_msg, estado, created_at
 )
-SELECT
+VALUES (
     $1::varchar, $2::varchar, $3::varchar, $4::varchar, $5::varchar,
     $6::varchar, $7::text, $8::bigint, $9::varchar, NOW()
-WHERE NOT EXISTS (
-    SELECT 1 FROM impactos_raw
-    WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($10::varchar))
-      AND COALESCE(usuario_raw, '') = COALESCE($11::varchar, '')
-      AND COALESCE(grupo_raw, '') = COALESCE($12::varchar, '')
-      AND COALESCE(timestamp_msg, 0) = COALESCE($13::bigint, 0)
-      AND eliminado_en IS NULL
-)`
+)
+ON CONFLICT (
+    (COALESCE(lower(btrim(hash_largo)), '')),
+    (COALESCE(usuario_raw, '')),
+    (COALESCE(grupo_raw, '')),
+    (COALESCE(timestamp_msg, 0))
+) WHERE eliminado_en IS NULL DO NOTHING`
 
 // insertRegistroSQL crea la fila del impacto 1 con conteo = 1. Si la fila ya
 // existe, DO NOTHING deja que el flujo decida si toca completar el binomio.
@@ -89,8 +89,7 @@ func (r *Repository) Registrar(ctx context.Context, event Event) (Registro, erro
 	if _, err := r.db.Exec(ctx, insertImpactoSeguroSQL,
 		event.HashLargo, event.HashCorto, event.Instancia, event.Usuario,
 		event.Grupo, event.NombrePush, event.Caption, event.Timestamp,
-		string(EstadoRecibido),
-		event.HashLargo, event.Usuario, event.Grupo, event.Timestamp); err != nil {
+		string(EstadoRecibido)); err != nil {
 		return Registro{}, r.sqlFail("insert_impactos_raw",
 			fmt.Errorf("ingesta: guardar impacto: %w", err))
 	}

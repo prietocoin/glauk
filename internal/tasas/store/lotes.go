@@ -17,7 +17,7 @@ import (
 // en lugar de usar SELECT * para que un cambio de esquema falle aquí, no en silencio.
 const (
 	sqlRecentLotes = `SELECT id_tasa, tasas FROM tasas_glaukov ORDER BY id DESC LIMIT 2`
-	sqlLoteByID    = `SELECT id_tasa, tasas FROM tasas_glaukov WHERE LOWER(id_tasa) = LOWER($1)`
+	sqlLoteByID    = `SELECT id_tasa, tasas FROM tasas_glaukov WHERE LOWER(BTRIM(id_tasa)) = LOWER(BTRIM($1))`
 )
 
 // nonDigit replica el saneamiento del identificador del servicio original (/\D/g).

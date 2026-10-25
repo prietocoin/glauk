@@ -14,7 +14,7 @@ import (
 // recibieron los socios.
 const (
 	sqlInsertLote = `INSERT INTO tasas_glaukov (id_tasa, tasas) VALUES ($1, $2) RETURNING id_tasa, tasas`
-	sqlDeleteLote = `DELETE FROM tasas_glaukov WHERE LOWER(id_tasa) = LOWER($1)`
+	sqlDeleteLote = `DELETE FROM tasas_glaukov WHERE LOWER(BTRIM(id_tasa)) = LOWER(BTRIM($1))`
 )
 
 // InsertLote guarda un lote nuevo y devuelve la fila tal como quedó en la tabla.

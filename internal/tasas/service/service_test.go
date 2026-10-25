@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pashagolub/pgxmock/v4"
 
 	"glauk/internal/platform/evolution"
@@ -16,8 +17,10 @@ import (
 )
 
 const (
-	sqlLotes  = `SELECT id_tasa, tasas FROM tasas_glaukov ORDER BY id DESC LIMIT 2`
-	sqlSocios = `SELECT * FROM perfiles_glaukov ORDER BY nombre ASC`
+	sqlLotes      = `SELECT id_tasa, tasas FROM tasas_glaukov ORDER BY id DESC LIMIT 2`
+	sqlSocios     = `SELECT * FROM perfiles_glaukov ORDER BY nombre ASC`
+	sqlLockLote   = `SELECT pg_advisory_xact_lock($1)`
+	sqlInsertLote = `INSERT INTO tasas_glaukov (id_tasa, tasas) VALUES ($1, $2) RETURNING id_tasa, tasas`
 )
 
 var ahoraFijo = time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
@@ -125,6 +128,76 @@ func TestPublicarSinLotes(t *testing.T) {
 	servicio := newService(mock, &remitenteFalso{}, "prueba@g.us", time.Now)
 	if _, err := servicio.Publicar(context.Background(), false); !errors.Is(err, ErrSinLotes) {
 		t.Fatalf("se esperaba ErrSinLotes, llegó %v", err)
+	}
+}
+
+func TestGuardarLoteSerializaLecturaYEscritura(t *testing.T) {
+	mock := nuevoMock(t)
+	mock.ExpectBegin()
+	mock.ExpectExec(sqlLockLote).WithArgs(loteLockKey).
+		WillReturnResult(pgconn.NewCommandTag("SELECT 1"))
+	mock.ExpectQuery(sqlLotes).WillReturnRows(
+		pgxmock.NewRows([]string{"id_tasa", "tasas"}).
+			AddRow(puntero("T060"), []byte(`{"USDT":1}`)))
+	mock.ExpectQuery(sqlInsertLote).
+		WithArgs("T061", pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"id_tasa", "tasas"}).
+			AddRow(puntero("T061"), []byte(`{"COP":4050}`)))
+	mock.ExpectCommit()
+
+	servicio := newService(mock, nil, "", func() time.Time { return ahoraFijo })
+	tasas := map[string]any{"COP": 4050}
+	lote, err := servicio.GuardarLote(context.Background(), tasas)
+	if err != nil {
+		t.Fatalf("guardar lote: %v", err)
+	}
+	if lote.IDTasa != "T061" || lote.Tasas["COP"] != 4050.0 {
+		t.Fatalf("lote inesperado: %+v", lote)
+	}
+	if tasas["CREATED_AT"] != ahoraFijo.UTC().Format(selloFecha) {
+		t.Fatalf("sello = %v", tasas["CREATED_AT"])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("consultas pendientes: %v", err)
+	}
+}
+
+func TestGuardarLoteReintentaSiOtroEscritorGanaLaCarrera(t *testing.T) {
+	mock := nuevoMock(t)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(sqlLockLote).WithArgs(loteLockKey).
+		WillReturnResult(pgconn.NewCommandTag("SELECT 1"))
+	mock.ExpectQuery(sqlLotes).WillReturnRows(
+		pgxmock.NewRows([]string{"id_tasa", "tasas"}).
+			AddRow(puntero("T060"), []byte(`{"USDT":1}`)))
+	mock.ExpectQuery(sqlInsertLote).
+		WithArgs("T061", pgxmock.AnyArg()).
+		WillReturnError(&pgconn.PgError{Code: "23505"})
+	mock.ExpectRollback()
+
+	mock.ExpectBegin()
+	mock.ExpectExec(sqlLockLote).WithArgs(loteLockKey).
+		WillReturnResult(pgconn.NewCommandTag("SELECT 1"))
+	mock.ExpectQuery(sqlLotes).WillReturnRows(
+		pgxmock.NewRows([]string{"id_tasa", "tasas"}).
+			AddRow(puntero("T061"), []byte(`{"USDT":1}`)))
+	mock.ExpectQuery(sqlInsertLote).
+		WithArgs("T062", pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"id_tasa", "tasas"}).
+			AddRow(puntero("T062"), []byte(`{"COP":4050}`)))
+	mock.ExpectCommit()
+
+	servicio := newService(mock, nil, "", func() time.Time { return ahoraFijo })
+	lote, err := servicio.GuardarLote(context.Background(), map[string]any{"COP": 4050})
+	if err != nil {
+		t.Fatalf("guardar lote: %v", err)
+	}
+	if lote.IDTasa != "T062" {
+		t.Fatalf("el reintento debía producir T062, llegó %q", lote.IDTasa)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("consultas pendientes: %v", err)
 	}
 }
 
