@@ -71,9 +71,10 @@ func TestProjectRowLive(t *testing.T) {
 	}
 }
 
-// TestProjectRowLiquidado verifica que una fila ya liquidada se siga proyectando
-// en vivo: el socio sale de comprobantes_liq, pero el signo y las equivalencias
-// se recalculan con su contrato actual, no con los importes almacenados.
+// TestProjectRowLiquidado verifica que una fila ya liquidada use los importes,
+// tasas y etiqueta guardados en comprobantes_liq, aunque el perfil actual tenga
+// otra polaridad u otro spread. La proyección viva no puede reescribir el
+// snapshot contable.
 func TestProjectRowLiquidado(t *testing.T) {
 	perfil1 := []byte(`{"nombre":"FUNDA","rol":"SOCIO","moneda_base":"USDT",` +
 		`"monedas":{"COP":{"tipo":"D","polar_D":"-","porcentaje":{"deposito":2}}}}`)
@@ -91,22 +92,20 @@ func TestProjectRowLiquidado(t *testing.T) {
 	if got.NombreSocio1 != "FUNDA" || got.NombreSocio2 != nil || got.TipoOp1 != "D-COP" {
 		t.Fatalf("cabecera = %+v", got)
 	}
-	if got.Monto != 100 || got.Tasa1 != 4080 || got.Monto2 != 0 || got.ME2 != 0 ||
+	if got.Monto != 100 || got.Tasa1 != 4000 || got.Monto1 != 100 || got.ME1 != 100 ||
+		got.Tasa2 != 1 || got.Monto2 != 0 || got.ME2 != 0 ||
 		got.LoteTasaAsignado != "T049" {
-		t.Fatalf("proyección viva = %+v", got)
+		t.Fatalf("snapshot congelado = %+v", got)
 	}
-	if got.Monto1 >= 0 || got.ME1 != got.Monto1 {
-		t.Fatalf("el signo debe seguir polar_D=- del perfil: %+v", got)
-	}
-	if got.Monto1 == 100 || got.ME1 == 100 {
-		t.Fatalf("no debe reutilizar el importe almacenado: %+v", got)
+	if got.M1Socio != got.Monto1 || got.M2Socio != got.Monto2 {
+		t.Fatalf("subtotales = %+v", got)
 	}
 }
 
-// TestProjectRowDepositoFUNDDAPolaridadNegativa exige que FUNDDA como socio 2
-// se proyecte con su polar_D, incluso si comprobantes_liq guardó el signo
-// opuesto. Los valores persistidos no bloquean la lectura viva.
-func TestProjectRowDepositoFUNDDAPolaridadNegativa(t *testing.T) {
+// TestProjectRowLiquidadoConservaSignoCongelado exige que el signo guardado en
+// comprobantes_liq mande sobre la polaridad actual del perfil. Cambiar la
+// configuración del socio no puede reescribir un comprobante ya liquidado.
+func TestProjectRowLiquidadoConservaSignoCongelado(t *testing.T) {
 	perfil1 := []byte(`{"nombre":"SOCIO_A","rol":"SOCIO","moneda_base":"USDT",` +
 		`"monedas":{"COP":{"tipo":"D","polar_D":"+","porcentaje":{"deposito":2}}}}`)
 	perfil2 := []byte(`{"nombre":"FUNDDA","rol":"ADMIN","moneda_base":"USDT",` +
@@ -126,14 +125,14 @@ func TestProjectRowDepositoFUNDDAPolaridadNegativa(t *testing.T) {
 	if got.NombreSocio2 == nil || *got.NombreSocio2 != "FUNDDA" {
 		t.Fatalf("socio 2 = %+v", got)
 	}
-	if got.Monto1 <= 0 || got.Monto2 >= 0 {
-		t.Fatalf("FUNDDA debe proyectarse negativa por polar_D=-: %+v", got)
+	if got.Monto1 != 98.04 || got.Tasa1 != 4080 || got.ME1 != 98.04 {
+		t.Fatalf("lado 1 congelado = %+v", got)
 	}
-	if got.Monto2 != -100 || got.ME2 != -100 || got.Tasa2 != 4000 {
-		t.Fatalf("importe vivo de FUNDDA = %+v", got)
+	if got.Monto2 != 200 || got.Tasa2 != 4000 || got.ME2 != 200 {
+		t.Fatalf("lado 2 congelado = %+v", got)
 	}
-	if got.M2Socio != got.Monto2 || got.M2Socio == 200 {
-		t.Fatalf("m_socio debe seguir la proyección viva: %+v", got)
+	if got.M1Socio != got.Monto1 || got.M2Socio != got.Monto2 {
+		t.Fatalf("subtotales deben seguir el snapshot: %+v", got)
 	}
 }
 
@@ -219,30 +218,49 @@ func TestProjectRowLiveParidadConSnapshot(t *testing.T) {
 	}
 }
 
-// TestProjectRowUsaTipoDelPerfilSobreTipoGuardado reproduce la tarjeta de
-// NELSY/FUNDDA en PEN: comprobantes_liq traía P-PEN y la UI seguía pintando
-// Pago aunque el perfil vigente configura D. La proyección debe ignorar la
-// letra almacenada para toda operación que no sea abono y leer el contrato de
-// socio 1 para la divisa.
-func TestProjectRowUsaTipoDelPerfilSobreTipoGuardado(t *testing.T) {
+// TestProjectRowLiquidadoConservaTipoCongelado reproduce la tarjeta de
+// NELSY/FUNDDA en PEN: comprobantes_liq guardó P-PEN y la lectura ya no puede
+// cambiarlo a D-PEN porque el perfil vigente configure otra naturaleza.
+func TestProjectRowLiquidadoConservaTipoCongelado(t *testing.T) {
 	perfil1 := []byte(`{"nombre":"NELSY","rol":"SOCIO","moneda_base":"USDT",` +
 		`"monedas":{"PEN":{"activo":true,"tipo":"D","polar_D":"+","polar_P":"-",` +
 		`"porcentaje":{"deposito":0,"pago":0}}}}`)
 	row := SourceRow{
 		HashLargo: "nelsey-pen", Monto: 100, Moneda: "PEN", EstaLiquidado: true,
-		Socio1: socioPtr("NELSY"), TipoOp1: socioPtr("P-PEN"),
+		Socio1: socioPtr("NELSY"), TipoOp1: socioPtr("P-PEN"), TipoOp2: socioPtr("P-PEN"),
+		Monto1: testPtr(29.5), Tasa1: testPtr(3.39), ME1: testPtr(29.5),
+		Tasa2: testPtr(1), Monto2: testPtr(0), ME2: testPtr(0),
 		RolSocio1: "SOCIO", MonedaSocio1: "USDT",
 		TasasLote: []byte(`{"PEN":3.39,"USDT":1}`),
 		Socio1Row: perfil1,
 	}
 	got := ProjectRow(row, Profile{})
-	if got.TipoOp1 != "D-PEN" || got.TipoOp2 != "D-PEN" {
-		t.Fatalf("la letra debe venir del perfil, no de TipoOp1: %+v", got)
+	if got.TipoOp1 != "P-PEN" || got.TipoOp2 != "P-PEN" {
+		t.Fatalf("la letra debe venir del snapshot, no del perfil: %+v", got)
 	}
-	if got.Monto1 <= 0 {
-		t.Fatalf("polar_D=+ debe proyectar 100 PEN como depósito positivo: %v", got.Monto1)
+	if got.Tasa1 != 3.39 || got.Monto1 != 29.5 || got.ME1 != 29.5 {
+		t.Fatalf("los importes deben venir del snapshot: %+v", got)
 	}
-	if got.Monto1 < 29.49 || got.Monto1 > 29.51 {
-		t.Fatalf("monto1 = %v, se esperaba ~+29.50 USDT", got.Monto1)
+}
+
+// TestProjectRowLiquidadoSinSnapshotUsaVivo cubre filas históricas incompletas:
+// si el lado no tiene tasa/monto/me, la lectura sigue resolviendo en vivo en
+// lugar de devolver ceros.
+func TestProjectRowLiquidadoSinSnapshotUsaVivo(t *testing.T) {
+	perfil1 := []byte(`{"nombre":"FUNDA","rol":"SOCIO","moneda_base":"USDT",` +
+		`"monedas":{"COP":{"tipo":"D","polar_D":"+","porcentaje":{"deposito":2}}}}`)
+	row := SourceRow{
+		HashLargo: "h-vivo", Monto: 400000, Moneda: "COP", EstaLiquidado: true,
+		Socio1: socioPtr("FUNDA"), TipoOp1: socioPtr("D-COP"),
+		RolSocio1: "SOCIO", MonedaSocio1: "USDT",
+		TasasLote: []byte(`{"COP":4000,"USDT":1}`),
+		Socio1Row: perfil1,
+	}
+	got := ProjectRow(row, Profile{})
+	if got.TipoOp1 != "D-COP" || got.Tasa1 != 4080 {
+		t.Fatalf("respaldo vivo = %+v", got)
+	}
+	if got.Monto1 <= 0 || got.ME1 <= 0 {
+		t.Fatalf("el respaldo vivo debe calcular el importe: %+v", got)
 	}
 }

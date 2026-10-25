@@ -6,7 +6,6 @@ package ingesta
 import (
 	"encoding/json"
 
-	"glauk/internal/comprobantes/calc"
 	"glauk/internal/comprobantes/domain"
 	"glauk/internal/platform/gemini"
 )
@@ -95,19 +94,8 @@ type LiquidacionInput struct {
 	Grupos     []string
 }
 
-// LiquidacionResult conserva el snapshot canónico y los datos de perfil que
-// alimentan la tabla legacy comprobantes_final.
+// LiquidacionResult conserva el snapshot canónico que la ingesta persiste en
+// comprobantes_liq.
 type LiquidacionResult struct {
-	Snapshot    domain.Liquidacion
-	TipoManual  string
-	Rol1        string
-	Rol2        string
-	MonedaBase1 string
-	MonedaBase2 string
-	Polaridad1  string
-	Polaridad2  string
-	Perfil1     calc.Profile
-	Perfil2     calc.Profile
-	Grupo1      string
-	Grupo2      string
+	Snapshot domain.Liquidacion
 }

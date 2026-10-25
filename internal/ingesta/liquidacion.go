@@ -89,23 +89,7 @@ func (l *LiquidadorAdapter) Liquidar(ctx context.Context,
 		fundda,
 	)
 
-	return LiquidacionResult{
-		Snapshot: snapshot,
-		// TipoManual refleja la naturaleza efectivamente calculada. Para IRIS
-		// en COP puede haber pasado de A a D por falta de abono en el caption,
-		// y comprobantes_final no debe conservar la etiqueta descartada.
-		TipoManual:  calc.OperationNature(snapshot.TipoOp1),
-		Rol1:        rolOf(perfil1),
-		Rol2:        rolOf(perfil2),
-		MonedaBase1: baseOf(perfil1),
-		MonedaBase2: baseOf(perfil2),
-		Polaridad1:  calc.PolarityOf(snapshot.Monto1),
-		Polaridad2:  calc.PolarityOf(snapshot.Monto2),
-		Perfil1:     perfil1,
-		Perfil2:     perfil2,
-		Grupo1:      grupo1,
-		Grupo2:      grupo2,
-	}, nil
+	return LiquidacionResult{Snapshot: snapshot}, nil
 }
 
 func (l *LiquidadorAdapter) perfil(ctx context.Context, grupo string) (calc.Profile, error) {
@@ -189,12 +173,4 @@ func baseOf(profile calc.Profile) string {
 		return "USDT"
 	}
 	return base
-}
-
-func rolOf(profile calc.Profile) string {
-	rol := strings.ToUpper(strings.TrimSpace(profile.Rol))
-	if rol == "" {
-		return "SOCIO"
-	}
-	return rol
 }

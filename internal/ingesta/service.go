@@ -144,7 +144,7 @@ func (s *Service) Procesar(ctx context.Context, job Job) error {
 	if err != nil {
 		return fmt.Errorf("ingesta: liquidar: %w", err)
 	}
-	if err := s.store.GuardarLiquidacion(ctx, input, result, s.cfg.EscribirFinal); err != nil {
+	if err := s.store.GuardarLiquidacion(ctx, result); err != nil {
 		return err
 	}
 	return s.store.MarcarEstado(ctx, job.HashLargo, EstadoProcesado)

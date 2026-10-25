@@ -20,7 +20,6 @@ type fakeStore struct {
 	imagen   string
 	err      error
 
-	input            LiquidacionInput
 	estado           Estado
 	updatedURL       string
 	savedExtraction  bool
@@ -40,9 +39,8 @@ func (f *fakeStore) GuardarExtraccion(_ context.Context, _, _, _ string,
 	f.savedExtraction = true
 	return f.err
 }
-func (f *fakeStore) GuardarLiquidacion(_ context.Context, input LiquidacionInput,
-	_ LiquidacionResult, _ bool) error {
-	f.input = input
+func (f *fakeStore) GuardarLiquidacion(_ context.Context,
+	_ LiquidacionResult) error {
 	f.savedLiquidation = true
 	return f.err
 }
@@ -95,10 +93,12 @@ type fakeLiq struct {
 	result LiquidacionResult
 	err    error
 	calls  int
+	input  LiquidacionInput
 }
 
-func (f *fakeLiq) Liquidar(context.Context, LiquidacionInput) (LiquidacionResult, error) {
+func (f *fakeLiq) Liquidar(_ context.Context, in LiquidacionInput) (LiquidacionResult, error) {
 	f.calls++
+	f.input = in
 	return f.result, f.err
 }
 
@@ -170,8 +170,8 @@ func TestProcesarPipelineCompleto(t *testing.T) {
 	if store.estado != EstadoProcesado {
 		t.Fatalf("estado = %s", store.estado)
 	}
-	if store.input.Monto != 100 || store.input.URLImagen == "" {
-		t.Fatalf("input = %+v", store.input)
+	if liq.input.Monto != 100 || liq.input.URLImagen == "" {
+		t.Fatalf("input = %+v", liq.input)
 	}
 }
 
@@ -192,8 +192,8 @@ func TestProcesarReutilizaExtraccion(t *testing.T) {
 	if ai.calls != 0 || store.savedExtraction {
 		t.Fatalf("gemini=%d extraccion=%v", ai.calls, store.savedExtraction)
 	}
-	if liq.calls != 1 || store.input.Monto != 50 {
-		t.Fatalf("liquidacion=%d input=%+v", liq.calls, store.input)
+	if liq.calls != 1 || liq.input.Monto != 50 {
+		t.Fatalf("liquidacion=%d input=%+v", liq.calls, liq.input)
 	}
 }
 

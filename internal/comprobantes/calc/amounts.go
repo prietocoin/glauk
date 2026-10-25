@@ -44,9 +44,9 @@ func SignedDivision(signo int, monto, tasa float64) float64 {
 
 // CalculateAmounts proyecta una fila con el contrato vigente de los socios.
 //
-// No existe una rama "congelada": tanto la vista previa como el listado
-// recalculan tasas, comisiones, equivalencias y signos con la configuración
-// actual de perfiles_glaukov.
+// Es la rama viva: se usa para filas no liquidadas y como respaldo cuando el
+// snapshot congelado no trae un lado completo. ProjectRow prioriza los valores
+// de comprobantes_liq cuando existen.
 func CalculateAmounts(row SourceRow, monto float64, divisa string,
 	cfg1, cfg2 SocioConfig, tipoLetra string,
 	signo1, signo2 int, hasSocio2 bool) (float64, float64, float64, float64, float64, float64) {

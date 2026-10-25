@@ -41,7 +41,6 @@ type Store interface {
 	Contexto(ctx context.Context, hash string) (Contexto, error)
 	GuardarExtraccion(ctx context.Context, hash, instancia, url string,
 		extraccion gemini.Result) error
-	GuardarLiquidacion(ctx context.Context, in LiquidacionInput,
-		result LiquidacionResult, escribirFinal bool) error
+	GuardarLiquidacion(ctx context.Context, result LiquidacionResult) error
 	MarcarEstado(ctx context.Context, hash string, estado Estado) error
 }

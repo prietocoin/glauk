@@ -3,7 +3,6 @@ package ingesta
 import (
 	"context"
 	"log/slog"
-	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -25,9 +24,6 @@ var _ DB = (*pgxpool.Pool)(nil)
 type Repository struct {
 	db  DB
 	log *slog.Logger
-
-	mu    sync.Mutex
-	final *bool
 }
 
 // NewRepository construye el repositorio con un pool real o un doble.
@@ -47,24 +43,4 @@ func (r *Repository) sqlFail(query string, err error) error {
 		r.log.Error("error sql en webhook", "error", err, "query", query)
 	}
 	return err
-}
-
-// finalDisponible pregunta una sola vez si la tabla legacy existe. Se cachea
-// para no pagar la consulta en cada comprobante y para que una base sin
-// comprobantes_final siga procesando sin escribirla.
-func (r *Repository) finalDisponible(ctx context.Context) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.final != nil {
-		return *r.final
-	}
-	var exists bool
-	err := r.db.QueryRow(ctx,
-		`SELECT to_regclass('comprobantes_final') IS NOT NULL`).Scan(&exists)
-	if err != nil {
-		_ = r.sqlFail("detectar_comprobantes_final", err)
-		return false
-	}
-	r.final = &exists
-	return exists
 }

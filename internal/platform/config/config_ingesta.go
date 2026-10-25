@@ -25,7 +25,6 @@ type IngestaConfig struct {
 	RetryBase     time.Duration
 	JobTimeout    time.Duration
 	MaxImageBytes int64
-	EscribirFinal bool
 	R2            R2Config
 	Gemini        GeminiConfig
 }
@@ -80,7 +79,6 @@ func buildIngesta(l lookupFunc, errs *Errors) IngestaConfig {
 	readDuration(l, "INGESTA_RETRY_BASE", defaultIngestaRetryBase, &cfg.RetryBase, errs)
 	readDuration(l, "INGESTA_JOB_TIMEOUT", defaultIngestaJobTimeout, &cfg.JobTimeout, errs)
 	readBytes(l, "INGESTA_MAX_IMAGE_BYTES", defaultIngestaImageBytes, &cfg.MaxImageBytes, errs)
-	readBool(l, "INGESTA_ESCRIBIR_FINAL", false, &cfg.EscribirFinal, errs)
 	readDuration(l, "GEMINI_TIMEOUT", defaultGeminiTimeout, &cfg.Gemini.Timeout, errs)
 
 	return cfg

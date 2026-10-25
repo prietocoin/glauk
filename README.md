@@ -655,7 +655,7 @@ Ejemplos dorados:
 
 ### 8.4 Proyección del listado
 
-`calc.ProjectRow` parte del monto absoluto truncado, resuelve socios e idioma de operación y, si la fila está liquidada, reaplica la polaridad sobre las magnitudes congeladas. Si no está liquidada, calcula en vivo con el lote histórico asignado. El tipo visible siempre es `letra-divisa` (`D-COP`, `A-USDT`, `P-COP`). `GENERAL` se serializa como `nombre_socio_2: null`; un array vacío se serializa como `[]`, nunca `null`.
+`calc.ProjectRow` parte del monto absoluto truncado, resuelve socios e idioma de operación y, si la fila está liquidada, usa los importes, tasas, equivalencias y etiquetas congelados en `comprobantes_liq`; solo recalcula en vivo los lados sin snapshot completo. Si la fila no está liquidada, calcula en vivo con el lote histórico asignado. El tipo visible siempre es `letra-divisa` (`D-COP`, `A-USDT`, `P-COP`). `GENERAL` se serializa como `nombre_socio_2: null`; un array vacío se serializa como `[]`, nunca `null`.
 
 ### 8.5 Endpoints canónicos
 
