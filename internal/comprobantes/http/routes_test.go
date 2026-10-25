@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	nethttp "net/http"
 	"net/http/httptest"
@@ -91,9 +92,14 @@ func (s stubService) DeleteQueue(ctx context.Context, hash string) error {
 
 func newTestApp(t *testing.T, key string) *fiber.App {
 	t.Helper()
+	return newTestAppWithService(t, stubService{}, key)
+}
+
+func newTestAppWithService(t *testing.T, svc Service, key string) *fiber.App {
+	t.Helper()
 	app := fiber.New()
 	cfg := &config.Config{Admin: config.AdminConfig{APIKey: key}}
-	if err := Register(app, NewDeps(stubService{}, cfg)); err != nil {
+	if err := Register(app, NewDeps(svc, cfg)); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
 	return app
@@ -147,6 +153,39 @@ func TestListInvalidDateIs400(t *testing.T) {
 		"/api/v1/comprobantes?fechaInicio=2026-99-99", "")
 	if resp.StatusCode != 400 {
 		t.Fatalf("fecha inválida = %d", resp.StatusCode)
+	}
+}
+
+func TestListSocioParamReturns200WithFilteredList(t *testing.T) {
+	var recibido domain.ListFilters
+	svc := stubService{list: func(_ context.Context, f domain.ListFilters) ([]domain.Comprobante, int, error) {
+		recibido = f
+		return []domain.Comprobante{{
+			HashLargo:    "HASH",
+			NombreSocio1: "CHASAN",
+		}}, 1, nil
+	}}
+	app := newTestAppWithService(t, svc, "secret")
+
+	resp := request(t, app, nethttp.MethodGet,
+		"/api/v1/comprobantes?socio=CHASAN", "")
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("socio=CHASAN status=%d: %s", resp.StatusCode, body)
+	}
+	if recibido.Socio != "CHASAN" {
+		t.Fatalf("filtro socio = %q, quiero CHASAN", recibido.Socio)
+	}
+	if total := resp.Header.Get("X-Total-Count"); total != "1" {
+		t.Fatalf("X-Total-Count = %q, quiero 1", total)
+	}
+
+	var items []domain.Comprobante
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		t.Fatalf("decodificar respuesta: %v", err)
+	}
+	if len(items) != 1 || items[0].NombreSocio1 != "CHASAN" {
+		t.Fatalf("lista filtrada inesperada: %+v", items)
 	}
 }
 

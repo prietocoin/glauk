@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -19,6 +20,32 @@ func newMock(t *testing.T) pgxmock.PgxPoolIface {
 	}
 	t.Cleanup(mock.Close)
 	return mock
+}
+
+func TestListRowsMapsSocioToDollarTwo(t *testing.T) {
+	mock := newMock(t)
+	query := strings.ReplaceAll(ListSQL, "{{PAGE_ORDER}}", orderClause(false, 100, 0))
+	query = strings.ReplaceAll(query, "{{OUTER_ORDER}}", outerOrderClause(false))
+
+	// $1 = rol, $2 = socio, $3 = fechaInicio, $4 = fechaFin, $5 = hash.
+	// Antes del fix se enviaba Socio en $1 y Rol en $2, así que ?socio=CHASAN
+	// filtraba por rol y devolvía 0 filas.
+	mock.ExpectQuery(query).
+		WithArgs("", "CHASAN", "", "", "").
+		WillReturnRows(pgxmock.NewRows(make([]string, 34)))
+
+	items, total, err := New(mock).ListRows(context.Background(), domain.ListFilters{
+		Socio: "CHASAN", Limit: 100, Orden: "fecha_desc",
+	})
+	if err != nil {
+		t.Fatalf("ListRows: %v", err)
+	}
+	if total != 0 || len(items) != 0 {
+		t.Fatalf("resultado inesperado: total=%d items=%d", total, len(items))
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectativas: %v", err)
+	}
 }
 
 func TestDeleteMarksImpactosInSameTransaction(t *testing.T) {

@@ -90,9 +90,11 @@ WITH candidatos AS (
            COUNT(*) OVER() AS total_registros
     FROM candidatos
     WHERE ($1::text = '' OR UPPER(TRIM(rol_socio_1)) = UPPER(TRIM($1::text)) OR UPPER(TRIM(rol_socio_2)) = UPPER(TRIM($1::text)))
-      AND ($2::text = '' OR
-           UPPER(TRIM(CASE WHEN esta_liquidado THEN socio_1 ELSE fb_socio_1 END)) = UPPER(TRIM($2::text)) OR
-           UPPER(TRIM(CASE WHEN esta_liquidado THEN socio_2 ELSE fb_socio_2 END)) = UPPER(TRIM($2::text)))
+      AND (
+        $2::text = '' OR
+        UPPER(TRIM(CASE WHEN esta_liquidado THEN socio_1 ELSE fb_socio_1 END)) = UPPER(TRIM($2::text)) OR
+        UPPER(TRIM(CASE WHEN esta_liquidado THEN socio_2 ELSE fb_socio_2 END)) = UPPER(TRIM($2::text))
+      )
 ), pagina AS (
     SELECT *
     FROM filtrados

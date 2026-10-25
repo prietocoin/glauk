@@ -39,13 +39,16 @@ func New(db DB) *Repository {
 
 // ListRows ejecuta la consulta de auditoría y devuelve una página de filas
 // crudas junto con el total del universo filtrado.
+//
+// El orden de los argumentos es parte del contrato de ListSQL:
+// $1 = rol, $2 = socio, $3 = fechaInicio, $4 = fechaFin, $5 = hash.
 func (r *Repository) ListRows(ctx context.Context, filters domain.ListFilters) ([]calc.SourceRow, int, error) {
 	query := strings.ReplaceAll(ListSQL, "{{PAGE_ORDER}}",
 		orderClause(filters.OrderAsc(), filters.Limit, filters.Offset))
 	query = strings.ReplaceAll(query, "{{OUTER_ORDER}}",
 		outerOrderClause(filters.OrderAsc()))
 	rows, err := r.db.Query(ctx, query,
-		filters.Socio, filters.Rol, filters.FechaInicio, filters.FechaFin, filters.Hash,
+		filters.Rol, filters.Socio, filters.FechaInicio, filters.FechaFin, filters.Hash,
 	)
 	if err != nil {
 		return nil, 0, fmt.Errorf("consultar comprobantes: %w", err)
