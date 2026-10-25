@@ -19,7 +19,7 @@ var ErrQueueFull = errors.New("ingesta: cola de trabajos saturada")
 
 const (
 	// orphanAfter es la ventana de gracia de P-09: un recibo que no consolidó
-	// su binomio 2x en 24 h se considera huérfano.
+	// su binomio 2x o que tiene monto no positivo en 24 h se considera huérfano.
 	orphanAfter = 24 * time.Hour
 	// orphanEvery acota el costo del barrido sin dejarlo solo en el arranque.
 	orphanEvery = 6 * time.Hour
@@ -99,14 +99,21 @@ func (m *Module) Start(ctx context.Context) {
 			m.log.Warn("ingesta: trabajos EN_COLA marcados como FALLO",
 				"cantidad", barridos)
 		}
-		m.sweepOrphans(ctx)
-		go m.sweepOrphansPeriodically(ctx)
+		m.runRetentionSweeps(ctx)
+		go m.runRetentionSweepsPeriodically(ctx)
 	}
 	m.queue.Start(ctx)
 }
 
-// sweepOrphans ejecuta una pasada de retención P-09. Un fallo no detiene el
-// arranque ni el dispatcher: el siguiente tick vuelve a intentarlo.
+// runRetentionSweeps ejecuta las pasadas de higiene de P-09. Un fallo aislado
+// no detiene el arranque ni el dispatcher: el siguiente tick vuelve a
+// intentarlo.
+func (m *Module) runRetentionSweeps(ctx context.Context) {
+	m.sweepOrphans(ctx)
+	m.sweepNonPositive(ctx)
+}
+
+// sweepOrphans retira los recibos que no lograron consolidar un binomio 2x.
 func (m *Module) sweepOrphans(ctx context.Context) {
 	if m == nil || m.store == nil {
 		return
@@ -125,9 +132,30 @@ func (m *Module) sweepOrphans(ctx context.Context) {
 	}
 }
 
-// sweepOrphansPeriodically repite el barrido mientras viva el proceso. El
-// ticker se cancela con el contexto de apagado que recibe Start.
-func (m *Module) sweepOrphansPeriodically(ctx context.Context) {
+// sweepNonPositive purga los recibos con monto menor o igual a cero.
+func (m *Module) sweepNonPositive(ctx context.Context) {
+	if m == nil || m.store == nil {
+		return
+	}
+	resultado, err := m.store.SweepNonPositive(ctx, m.orphanAfter)
+	if err != nil {
+		m.log.Warn("ingesta: no se pudieron barrer montos no positivos",
+			"error", err)
+		return
+	}
+	if resultado.Impactos > 0 || resultado.Liquidaciones > 0 ||
+		resultado.Comprobantes > 0 {
+		m.log.Warn("ingesta: montos no positivos retirados",
+			"impactos", resultado.Impactos,
+			"liquidaciones", resultado.Liquidaciones,
+			"comprobantes", resultado.Comprobantes,
+			"antiguedad", m.orphanAfter)
+	}
+}
+
+// runRetentionSweepsPeriodically repite los barridos mientras viva el proceso.
+// El ticker se cancela con el contexto de apagado que recibe Start.
+func (m *Module) runRetentionSweepsPeriodically(ctx context.Context) {
 	every := m.orphanEvery
 	if every <= 0 {
 		every = orphanEvery
@@ -139,7 +167,7 @@ func (m *Module) sweepOrphansPeriodically(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			m.sweepOrphans(ctx)
+			m.runRetentionSweeps(ctx)
 		}
 	}
 }

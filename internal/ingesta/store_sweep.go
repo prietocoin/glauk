@@ -103,10 +103,49 @@ WHERE c.creado_en < NOW() - ($1::bigint * INTERVAL '1 second')
       AND i.eliminado_en IS NULL
   )`
 
+// sweepNonPositiveImpactosSQL retira la evidencia de WhatsApp de los recibos
+// con monto no positivo antes de borrar sus filas canónicas. Se usa borrado
+// lógico para conservar la trazabilidad del origen.
+const sweepNonPositiveImpactosSQL = `
+UPDATE impactos_raw AS i
+SET eliminado_en = NOW()
+FROM comprobantes_raw AS c
+WHERE i.eliminado_en IS NULL
+  AND i.hash_largo IS NOT NULL
+  AND btrim(i.hash_largo) <> ''
+  AND lower(btrim(i.hash_largo)) = lower(btrim(c.hash_largo))
+  AND c.monto <= 0
+  AND c.creado_en < NOW() - ($1::bigint * INTERVAL '1 second')`
+
+// purgeNonPositiveLiquidacionesSQL borra el snapshot de los recibos con monto
+// no positivo. comprobantes_liq no tiene creado_en: la antigüedad se toma del
+// comprobante_raw asociado, que es el sello estable del recibo. Debe ejecutarse
+// antes del DELETE de comprobantes_raw para conservar el join.
+const purgeNonPositiveLiquidacionesSQL = `
+DELETE FROM comprobantes_liq AS l
+USING comprobantes_raw AS c
+WHERE lower(btrim(l.hash_largo)) = lower(btrim(c.hash_largo))
+  AND c.monto <= 0
+  AND c.creado_en < NOW() - ($1::bigint * INTERVAL '1 second')`
+
+// purgeNonPositiveComprobantesSQL elimina los recibos crudos con monto no
+// positivo después de la ventana de gracia.
+const purgeNonPositiveComprobantesSQL = `
+DELETE FROM comprobantes_raw
+WHERE monto <= 0
+  AND creado_en < NOW() - ($1::bigint * INTERVAL '1 second')`
+
 // OrphanSweep resume las filas tocadas por SweepOrphans.
 type OrphanSweep struct {
 	Impactos     int
 	Comprobantes int
+}
+
+// NonPositiveSweep resume las filas tocadas por SweepNonPositive.
+type NonPositiveSweep struct {
+	Impactos      int
+	Liquidaciones int
+	Comprobantes  int
 }
 
 // SweepStaleJobs transiciona de EN_COLA a FALLO los trabajos que superaron la
@@ -156,4 +195,41 @@ func (r *Repository) SweepOrphans(ctx context.Context, olderThan time.Duration) 
 		Impactos:     int(tagImpactos.RowsAffected()),
 		Comprobantes: int(tagComprobantes.RowsAffected()),
 	}, nil
+}
+
+// SweepNonPositive aplica la retención de montos no positivos: marca la
+// evidencia, borra el snapshot liquidado y luego el recibo crudo. La antigüedad
+// se mide con comprobantes_raw.creado_en porque comprobantes_liq no tiene un
+// sello temporal propio en el contrato mínimo. Es idempotente: si una sentencia
+// falla, el siguiente tick retoma desde el estado actual.
+func (r *Repository) SweepNonPositive(ctx context.Context, olderThan time.Duration) (NonPositiveSweep, error) {
+	if olderThan <= 0 {
+		return NonPositiveSweep{}, fmt.Errorf("ingesta: la antigüedad de montos no positivos debe ser positiva")
+	}
+	seconds := int64(olderThan / time.Second)
+	if seconds < 1 {
+		seconds = 1
+	}
+
+	tagImpactos, err := r.db.Exec(ctx, sweepNonPositiveImpactosSQL, seconds)
+	if err != nil {
+		return NonPositiveSweep{}, r.sqlFail("sweep_impactos_monto_no_positivo",
+			fmt.Errorf("ingesta: marcar impactos con monto no positivo: %w", err))
+	}
+	resultado := NonPositiveSweep{Impactos: int(tagImpactos.RowsAffected())}
+
+	tagLiquidaciones, err := r.db.Exec(ctx, purgeNonPositiveLiquidacionesSQL, seconds)
+	if err != nil {
+		return resultado, r.sqlFail("purge_liquidaciones_monto_no_positivo",
+			fmt.Errorf("ingesta: purgar liquidaciones con monto no positivo: %w", err))
+	}
+	resultado.Liquidaciones = int(tagLiquidaciones.RowsAffected())
+
+	tagComprobantes, err := r.db.Exec(ctx, purgeNonPositiveComprobantesSQL, seconds)
+	if err != nil {
+		return resultado, r.sqlFail("purge_comprobantes_monto_no_positivo",
+			fmt.Errorf("ingesta: purgar comprobantes con monto no positivo: %w", err))
+	}
+	resultado.Comprobantes = int(tagComprobantes.RowsAffected())
+	return resultado, nil
 }

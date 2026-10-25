@@ -26,9 +26,13 @@ func TestListSQLRequiresLiquidatedAndPositiveAmount(t *testing.T) {
 	sql := strings.Join(strings.Fields(ListSQL), " ")
 	for _, want := range []string{
 		"l.hash_largo IS NOT NULL",
+		"l.socio_1 IS NOT NULL",
+		"btrim(l.socio_1) <> ''",
+		"UPPER(btrim(l.socio_1)) <> 'GENERAL'",
 		"l.socio_2 IS NOT NULL",
 		"btrim(l.socio_2) <> ''",
 		"UPPER(btrim(l.socio_2)) <> 'GENERAL'",
+		"lower(btrim(l.socio_1)) <> lower(btrim(l.socio_2))",
 		"c.monto > 0",
 	} {
 		if !strings.Contains(sql, want) {

@@ -153,6 +153,88 @@ func TestSweepOrphansNoPurgaSiFallaElMarcado(t *testing.T) {
 	}
 }
 
+func TestSweepNonPositivePurgaLiquidacionYComprobante(t *testing.T) {
+	db := &execFake{
+		tags: []pgconn.CommandTag{
+			pgconn.NewCommandTag("UPDATE 2"),
+			pgconn.NewCommandTag("DELETE 5"),
+			pgconn.NewCommandTag("DELETE 4"),
+		},
+	}
+	repo := NewRepository(db, testLogger())
+
+	got, err := repo.SweepNonPositive(context.Background(), 24*time.Hour)
+	if err != nil {
+		t.Fatalf("sweep montos no positivos: %v", err)
+	}
+	if got.Impactos != 2 || got.Liquidaciones != 5 || got.Comprobantes != 4 {
+		t.Fatalf("resultado = %+v, want {2 5 4}", got)
+	}
+	if len(db.calls) != 3 {
+		t.Fatalf("sentencias ejecutadas = %d, want 3", len(db.calls))
+	}
+
+	impactos := strings.Join(strings.Fields(db.calls[0].query), " ")
+	for _, want := range []string{
+		"UPDATE impactos_raw",
+		"SET eliminado_en = NOW()",
+		"c.monto <= 0",
+		"c.creado_en < NOW()",
+	} {
+		if !strings.Contains(impactos, want) {
+			t.Fatalf("marcado de impactos: falta %q\n%s", want, impactos)
+		}
+	}
+
+	liquidaciones := strings.Join(strings.Fields(db.calls[1].query), " ")
+	for _, want := range []string{
+		"DELETE FROM comprobantes_liq",
+		"USING comprobantes_raw",
+		"c.monto <= 0",
+		"c.creado_en < NOW()",
+	} {
+		if !strings.Contains(liquidaciones, want) {
+			t.Fatalf("purga de liquidaciones: falta %q\n%s", want, liquidaciones)
+		}
+	}
+
+	comprobantes := strings.Join(strings.Fields(db.calls[2].query), " ")
+	for _, want := range []string{
+		"DELETE FROM comprobantes_raw",
+		"monto <= 0",
+		"creado_en < NOW()",
+	} {
+		if !strings.Contains(comprobantes, want) {
+			t.Fatalf("purga de comprobantes: falta %q\n%s", want, comprobantes)
+		}
+	}
+
+	for _, call := range db.calls {
+		if len(call.args) != 1 || call.args[0] != int64(86400) {
+			t.Fatalf("argumentos = %#v, want [86400]", call.args)
+		}
+	}
+}
+
+func TestSweepNonPositiveRechazaVentanaInvalida(t *testing.T) {
+	repo := NewRepository(&execFake{}, testLogger())
+	if _, err := repo.SweepNonPositive(context.Background(), 0); err == nil {
+		t.Fatal("se esperaba error con ventana cero")
+	}
+}
+
+func TestSweepNonPositiveNoPurgaSiFallaElMarcado(t *testing.T) {
+	db := &execFake{errs: []error{context.DeadlineExceeded}}
+	repo := NewRepository(db, testLogger())
+
+	if _, err := repo.SweepNonPositive(context.Background(), 24*time.Hour); err == nil {
+		t.Fatal("se esperaba error al marcar impactos")
+	}
+	if len(db.calls) != 1 {
+		t.Fatalf("sentencias ejecutadas = %d, want 1", len(db.calls))
+	}
+}
+
 func TestNormalizeRegistrosHash(t *testing.T) {
 	db := &execFake{tag: pgconn.NewCommandTag("UPDATE 7")}
 	repo := NewRepository(db, testLogger())

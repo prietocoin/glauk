@@ -11,9 +11,11 @@ import (
 // se pagina y recién entonces se expande la evidencia de presentación y el
 // lote de tasas.
 //
-// El WHERE exige un binomio 2x real: la fila debe estar liquidada, tener un
-// socio_2 distinto de NULL/vacío/GENERAL y un monto de recibo mayor a cero.
-// Los registros crudos que nunca consolidaron su contraparte no se listan.
+// El WHERE exige un binomio 2x real: la fila debe estar liquidada, tener dos
+// socios distintos, ninguno NULL/vacío/GENERAL, y un monto de recibo mayor a
+// cero. Los registros crudos que nunca consolidaron su contraparte, los 1x
+// camuflados con el mismo socio repetido y los montos no positivos no se
+// listan.
 //
 // El total del universo filtrado se calcula con COUNT(*) OVER() dentro de
 // "filtrados", es decir, antes de los joins de presentación. Los marcadores
@@ -87,9 +89,13 @@ WITH candidatos AS (
         ON upper(btrim(n2.nombre)) = upper(btrim(COALESCE(l.socio_2, n_grupo2.nombre, n_user2.nombre)))
     WHERE lower(btrim(c.instancia)) IN ('glauk', 'jairo')
       AND l.hash_largo IS NOT NULL
+      AND l.socio_1 IS NOT NULL
+      AND btrim(l.socio_1) <> ''
+      AND UPPER(btrim(l.socio_1)) <> 'GENERAL'
       AND l.socio_2 IS NOT NULL
       AND btrim(l.socio_2) <> ''
       AND UPPER(btrim(l.socio_2)) <> 'GENERAL'
+      AND lower(btrim(l.socio_1)) <> lower(btrim(l.socio_2))
       AND c.monto > 0
       AND ($5::text = '' OR c.hash_largo ILIKE '%' || $5::text || '%' OR c.referencia ILIKE '%' || $5::text || '%')
       AND (NULLIF($3::text, '') IS NULL OR c.creado_en >= NULLIF($3::text, '')::date)
