@@ -34,9 +34,17 @@ type RawUpdate struct {
 }
 
 const lockComprobanteSQL = `
-SELECT COALESCE(monto, 0), moneda, banco, referencia, titular, COALESCE(caption, '')
-FROM comprobantes_raw
-WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))
+SELECT COALESCE(cr.monto, 0), cr.moneda, cr.banco, cr.referencia, cr.titular,
+       COALESCE((
+           SELECT i.caption
+           FROM impactos_raw i
+           WHERE LOWER(TRIM(i.hash_largo)) = LOWER(TRIM(cr.hash_largo))
+             AND i.eliminado_en IS NULL
+           ORDER BY i.timestamp_msg DESC NULLS LAST, i.id DESC
+           LIMIT 1
+       ), '')
+FROM comprobantes_raw cr
+WHERE LOWER(TRIM(cr.hash_largo)) = LOWER(TRIM($1))
 FOR UPDATE`
 
 const profileByNameSQL = `
