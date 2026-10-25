@@ -10,13 +10,20 @@ import (
 	"strings"
 )
 
+// normalizeHash fija la identidad canónica de un comprobante: minúsculas y sin
+// espacios. Es el único formato que debe llegar a PostgreSQL; las filas
+// históricas en mayúsculas se sanean al arrancar la ingesta.
+func normalizeHash(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
 // hashFromMessage replica la identidad del binomio de remitHub: el SHA-256 del
 // archivo que WhatsApp adjunta en fileSha256. Cuando la instancia no lo envía,
 // se usa el id del mensaje para no perder el evento.
 func hashFromMessage(body messageBody, key keyData) string {
 	if body.ImageMessage != nil {
 		if hash := decodeFileSha(body.ImageMessage.FileSha256); hash != "" {
-			return hash
+			return normalizeHash(hash)
 		}
 	}
 	id := strings.TrimSpace(key.ID)

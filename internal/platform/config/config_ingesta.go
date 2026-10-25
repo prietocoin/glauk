@@ -8,6 +8,7 @@ const (
 	defaultIngestaRetries    = 3
 	defaultIngestaRetryBase  = 500 * time.Millisecond
 	defaultIngestaJobTimeout = 2 * time.Minute
+	defaultIngestaStaleAfter = 15 * time.Minute
 	defaultIngestaImageBytes = 20 << 20
 	defaultGeminiModel       = "gemini-1.5-flash"
 	defaultGeminiTimeout     = 45 * time.Second
@@ -24,6 +25,7 @@ type IngestaConfig struct {
 	MaxRetries    int
 	RetryBase     time.Duration
 	JobTimeout    time.Duration
+	StaleAfter    time.Duration
 	MaxImageBytes int64
 	R2            R2Config
 	Gemini        GeminiConfig
@@ -55,6 +57,7 @@ func buildIngesta(l lookupFunc, errs *Errors) IngestaConfig {
 		MaxRetries:    defaultIngestaRetries,
 		RetryBase:     defaultIngestaRetryBase,
 		JobTimeout:    defaultIngestaJobTimeout,
+		StaleAfter:    defaultIngestaStaleAfter,
 		MaxImageBytes: defaultIngestaImageBytes,
 		R2: R2Config{
 			AccountID:       envString(l, "R2_ACCOUNT_ID", ""),
@@ -78,6 +81,7 @@ func buildIngesta(l lookupFunc, errs *Errors) IngestaConfig {
 	readInt(l, "INGESTA_MAX_RETRIES", defaultIngestaRetries, &cfg.MaxRetries, errs)
 	readDuration(l, "INGESTA_RETRY_BASE", defaultIngestaRetryBase, &cfg.RetryBase, errs)
 	readDuration(l, "INGESTA_JOB_TIMEOUT", defaultIngestaJobTimeout, &cfg.JobTimeout, errs)
+	readDuration(l, "INGESTA_STALE_AFTER", defaultIngestaStaleAfter, &cfg.StaleAfter, errs)
 	readBytes(l, "INGESTA_MAX_IMAGE_BYTES", defaultIngestaImageBytes, &cfg.MaxImageBytes, errs)
 	readDuration(l, "GEMINI_TIMEOUT", defaultGeminiTimeout, &cfg.Gemini.Timeout, errs)
 

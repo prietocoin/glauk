@@ -21,6 +21,9 @@ func TestIngestaDefaults(t *testing.T) {
 	if ing.RetryBase != 500*time.Millisecond || ing.JobTimeout != 2*time.Minute {
 		t.Fatalf("tiempos = %v / %v", ing.RetryBase, ing.JobTimeout)
 	}
+	if ing.StaleAfter != 15*time.Minute {
+		t.Fatalf("stale after = %v", ing.StaleAfter)
+	}
 	if ing.R2.Bucket != "remesas-img" || ing.Gemini.Model != "gemini-1.5-flash" {
 		t.Fatalf("bucket=%s modelo=%s", ing.R2.Bucket, ing.Gemini.Model)
 	}
@@ -80,12 +83,14 @@ func TestIngestaRangosYEndpoint(t *testing.T) {
 		"INGESTA_WORKERS":      "0",
 		"INGESTA_QUEUE_SIZE":   "0",
 		"INGESTA_MAX_RETRIES":  "11",
+		"INGESTA_STALE_AFTER":  "0s",
 	}, "development")
 	text := errs.Error()
 	for _, want := range []string{
 		"INGESTA_WORKERS debe estar entre 1 y 32",
 		"INGESTA_QUEUE_SIZE debe estar entre 1 y 10000",
 		"INGESTA_MAX_RETRIES debe estar entre 0 y 10",
+		"INGESTA_STALE_AFTER debe ser una duración positiva",
 		"R2_ENDPOINT debe ser una URL http(s) con host",
 	} {
 		if !strings.Contains(text, want) {

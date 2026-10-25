@@ -11,6 +11,10 @@ import (
 // insertImpactoSeguroSQL usa un marcador distinto por columna y por comparación
 // del NOT EXISTS. Los casts evitan que PostgreSQL deduzca tipos inconsistentes
 // (SQLSTATE 42P08) al reutilizar parámetros en contextos varchar/text/bigint.
+//
+// La comparación de impactos_raw sigue siendo case-insensitive porque esa tabla
+// conserva evidencia histórica en mayúsculas. registros_raw se sanea al arrancar
+// y sus búsquedas usan igualdad exacta.
 const insertImpactoSeguroSQL = `
 INSERT INTO impactos_raw (
     hash_largo, hash_corto, instancia, usuario_raw, grupo_raw,
@@ -63,7 +67,7 @@ FROM (
     ORDER BY id ASC
     LIMIT 1 OFFSET 1
 ) AS s
-WHERE LOWER(TRIM(r.hash_largo)) = LOWER(TRIM($2::varchar))
+WHERE r.hash_largo = $2::varchar
   AND COALESCE(r.conteo, 0) < 2
 RETURNING r.conteo, COALESCE(r.estado, 'PROCESADO')`
 
@@ -81,6 +85,7 @@ const marcarEstadoSQL = `UPDATE registros_raw SET estado = $2::varchar WHERE has
 // esquema real: impacto 1 INSERT conteo=1; impacto 2 UPDATE conteo=2 y
 // estado='PROCESADO'. Devuelve Completo solo cuando esta llamada cerró el par.
 func (r *Repository) Registrar(ctx context.Context, event Event) (Registro, error) {
+	event.HashLargo = normalizeHash(event.HashLargo)
 	if _, err := r.db.Exec(ctx, insertImpactoSeguroSQL,
 		event.HashLargo, event.HashCorto, event.Instancia, event.Usuario,
 		event.Grupo, event.NombrePush, event.Caption, event.Timestamp,
@@ -133,6 +138,7 @@ func (r *Repository) Registrar(ctx context.Context, event Event) (Registro, erro
 // Claim evita encolar dos veces el mismo binomio. PROCESADO se acepta porque
 // el impacto 2 marca el par como completo antes de encolarlo.
 func (r *Repository) Claim(ctx context.Context, hash string) (bool, error) {
+	hash = normalizeHash(hash)
 	tag, err := r.db.Exec(ctx, claimJobSQL, hash)
 	if err != nil {
 		return false, r.sqlFail("claim_registros_raw",
@@ -144,6 +150,7 @@ func (r *Repository) Claim(ctx context.Context, hash string) (bool, error) {
 // MarcarEstado cierra el ciclo del registro; en FALLO el operador puede
 // reenviar el webhook y Claim lo volverá a encolar.
 func (r *Repository) MarcarEstado(ctx context.Context, hash string, estado Estado) error {
+	hash = normalizeHash(hash)
 	if _, err := r.db.Exec(ctx, marcarEstadoSQL, hash, string(estado)); err != nil {
 		return r.sqlFail("marcar_estado_registros_raw",
 			fmt.Errorf("ingesta: marcar %s: %w", estado, err))

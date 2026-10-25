@@ -26,6 +26,7 @@ ON CONFLICT (hash_largo) DO UPDATE SET
 func (r *Repository) GuardarLiquidacion(ctx context.Context,
 	result LiquidacionResult) error {
 	snapshot := result.Snapshot
+	snapshot.HashLargo = normalizeHash(snapshot.HashLargo)
 	socio2 := ""
 	if snapshot.Socio2 != nil {
 		socio2 = *snapshot.Socio2

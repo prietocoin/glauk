@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -19,9 +20,12 @@ var ErrQueueFull = errors.New("ingesta: cola de trabajos saturada")
 // Module agrupa el caso de uso y su pool de workers. cmd/server solo llama a
 // Start, Close y Recibir; no conoce canales ni clientes externos.
 type Module struct {
-	service *Service
-	queue   *Dispatcher
-	enabled bool
+	service    *Service
+	store      *Repository
+	queue      *Dispatcher
+	enabled    bool
+	log        *slog.Logger
+	staleAfter time.Duration
 }
 
 // NewModule cablea R2, Gemini, el store y el liquidador. Se construye siempre
@@ -30,6 +34,9 @@ func NewModule(cfg *config.Config, pool *pgxpool.Pool, evo *evolution.Client,
 	log *slog.Logger) *Module {
 	if cfg == nil || pool == nil {
 		return nil
+	}
+	if log == nil {
+		log = slog.Default()
 	}
 	repository := NewRepository(pool, log)
 	images := r2.New(cfg.Ingesta.R2)
@@ -46,16 +53,41 @@ func NewModule(cfg *config.Config, pool *pgxpool.Pool, evo *evolution.Client,
 		cfg.Ingesta.JobTimeout, cfg.Ingesta.MaxRetries, cfg.Ingesta.RetryBase,
 		service.Procesar, service.Fallar, log)
 
-	return &Module{service: service, queue: queue, enabled: cfg.Ingesta.Enabled}
+	staleAfter := cfg.Ingesta.StaleAfter
+	if staleAfter <= 0 {
+		staleAfter = 15 * time.Minute
+	}
+	return &Module{
+		service: service, store: repository, queue: queue,
+		enabled: cfg.Ingesta.Enabled, log: log, staleAfter: staleAfter,
+	}
 }
 
 // Enabled refleja INGESTA_ENABLED. Deshabilitado no arranca workers.
 func (m *Module) Enabled() bool { return m != nil && m.enabled }
 
-// Start lanza el pool de workers con el contexto del servidor.
+// Start sanea el estado persistido antes de lanzar el pool de workers. El
+// barrido corre antes de abrir el puerto HTTP, de modo que ningún webhook
+// compite con la reparación de hashes ni con la transición de EN_COLA.
 func (m *Module) Start(ctx context.Context) {
 	if m == nil || !m.enabled {
 		return
+	}
+	if m.store != nil {
+		if normalizados, err := m.store.NormalizeRegistrosHash(ctx); err != nil {
+			m.log.Warn("ingesta: no se pudieron normalizar hashes históricos",
+				"error", err)
+		} else if normalizados > 0 {
+			m.log.Info("ingesta: hashes históricos normalizados",
+				"cantidad", normalizados)
+		}
+		if barridos, err := m.store.SweepStaleJobs(ctx, m.staleAfter); err != nil {
+			m.log.Warn("ingesta: no se pudieron barrer trabajos EN_COLA",
+				"error", err)
+		} else if barridos > 0 {
+			m.log.Warn("ingesta: trabajos EN_COLA marcados como FALLO",
+				"cantidad", barridos)
+		}
 	}
 	m.queue.Start(ctx)
 }

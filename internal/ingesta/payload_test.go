@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -151,6 +152,29 @@ func TestParseEventFallsBackToKeyID(t *testing.T) {
 	sum := sha256.Sum256([]byte("ABC123"))
 	if event.HashLargo != hex.EncodeToString(sum[:]) {
 		t.Fatalf("hash de respaldo = %s", event.HashLargo)
+	}
+}
+
+func TestParseEventNormalizaHashAMinusculas(t *testing.T) {
+	uppercase := strings.ToUpper(hex.EncodeToString(hashBytes()))
+	event, err := ParseEvent(imagePayload(uppercase, "glauk"), "glauk")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if event.HashLargo != strings.ToLower(uppercase) {
+		t.Fatalf("hash = %q, want %q", event.HashLargo, strings.ToLower(uppercase))
+	}
+	if event.HashLargo != strings.ToLower(strings.TrimSpace(event.HashLargo)) {
+		t.Fatalf("hash no canónico = %q", event.HashLargo)
+	}
+}
+
+func TestNormalizeHashRecortaYMinusculiza(t *testing.T) {
+	if got := normalizeHash("  AbC123  "); got != "abc123" {
+		t.Fatalf("normalizeHash = %q", got)
+	}
+	if got := normalizeHash(""); got != "" {
+		t.Fatalf("normalizeHash vacío = %q", got)
 	}
 }
 

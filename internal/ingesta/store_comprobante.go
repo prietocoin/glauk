@@ -34,6 +34,7 @@ ON CONFLICT (hash_largo) DO UPDATE SET
 // perder la lectura de la imagen.
 func (r *Repository) GuardarExtraccion(ctx context.Context, hash, instancia,
 	url string, extraccion gemini.Result) error {
+	hash = normalizeHash(hash)
 	if _, err := r.db.Exec(ctx, upsertExtraccionSQL,
 		hash, extraccion.Monto, extraccion.Moneda, extraccion.Banco,
 		extraccion.Referencia, extraccion.Titular, url, instancia); err != nil {

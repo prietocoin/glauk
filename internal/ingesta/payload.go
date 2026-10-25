@@ -92,7 +92,7 @@ func ParseEvent(raw []byte, defaultInstance string) (Event, error) {
 	}
 	return Event{
 		Instancia:  normalizeInstance(firstNonEmpty(instance, message.Instance, message.InstanceID, defaultInstance)),
-		HashLargo:  hash,
+		HashLargo:  normalizeHash(hash),
 		HashCorto:  shortHash(hash),
 		Usuario:    firstNonEmpty(key.ParticipantAlt, key.Participant, key.RemoteJID),
 		Grupo:      key.RemoteJID,

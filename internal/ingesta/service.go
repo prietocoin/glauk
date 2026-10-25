@@ -81,6 +81,7 @@ func (s *Service) Recibir(ctx context.Context, raw []byte) (Decision, *Job, erro
 // Procesar ejecuta un trabajo completo. Es idempotente: si la extracción ya
 // existe reutiliza esos datos y solo reintenta la liquidación pendiente.
 func (s *Service) Procesar(ctx context.Context, job Job) error {
+	job.HashLargo = normalizeHash(job.HashLargo)
 	contexto, err := s.store.Contexto(ctx, job.HashLargo)
 	if err != nil {
 		return err

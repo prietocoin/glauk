@@ -24,6 +24,10 @@ const actualizarRegistroImagenSQL = `
 UPDATE registros_raw SET url_imagen = $2::text
 WHERE hash_largo = $1::varchar AND (url_imagen IS NULL OR url_imagen = '')`
 
+// contextoComprobanteSQL y contextoImpactosSQL conservan comparaciones
+// case-insensitive porque comprobantes_raw e impactos_raw aún pueden tener
+// evidencia histórica en mayúsculas. La clave canónica se escribe en minúsculas
+// y registros_raw se sanea al arrancar la ingesta.
 const contextoComprobanteSQL = `
 SELECT COALESCE(instancia, ''), COALESCE(url_r2, ''),
        COALESCE(monto, 0), COALESCE(moneda, ''), COALESCE(banco, ''),
@@ -44,6 +48,7 @@ ORDER BY id ASC`
 // ImagenExistente devuelve la URL ya publicada en cualquier impacto, para no
 // volver a subir el mismo binario cuando llega el segundo mensaje.
 func (r *Repository) ImagenExistente(ctx context.Context, hash string) (string, error) {
+	hash = normalizeHash(hash)
 	var url string
 	err := r.db.QueryRow(ctx, imagenExistenteSQL, hash).Scan(&url)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -59,6 +64,7 @@ func (r *Repository) ImagenExistente(ctx context.Context, hash string) (string, 
 // ActualizarImagen propaga la URL a los impactos que aún no la tenían y, de
 // forma best-effort, al registro que lee el panel.
 func (r *Repository) ActualizarImagen(ctx context.Context, hash, url string) error {
+	hash = normalizeHash(hash)
 	if _, err := r.db.Exec(ctx, actualizarImagenSQL, hash, url); err != nil {
 		return r.sqlFail("update_impactos_raw_imagen",
 			fmt.Errorf("ingesta: actualizar imagen: %w", err))
@@ -72,6 +78,7 @@ func (r *Repository) ActualizarImagen(ctx context.Context, hash, url string) err
 // Contexto mezcla la fila de comprobantes_raw (si ya existe) con los metadatos
 // de los dos impactos. No es un error que el comprobante todavía no exista.
 func (r *Repository) Contexto(ctx context.Context, hash string) (Contexto, error) {
+	hash = normalizeHash(hash)
 	result := Contexto{HashLargo: hash}
 	var creadoEn int64
 	err := r.db.QueryRow(ctx, contextoComprobanteSQL, hash).Scan(

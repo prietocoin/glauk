@@ -15,7 +15,7 @@ func (c *Config) validateIngesta(errs *Errors) {
 	if ing.MaxRetries < 0 || ing.MaxRetries > 10 {
 		*errs = append(*errs, "INGESTA_MAX_RETRIES debe estar entre 0 y 10")
 	}
-	if ing.RetryBase <= 0 || ing.JobTimeout <= 0 {
+	if ing.RetryBase <= 0 || ing.JobTimeout <= 0 || ing.StaleAfter <= 0 {
 		*errs = append(*errs, "los tiempos de INGESTA deben ser positivos")
 	}
 	if ing.MaxImageBytes <= 0 {
