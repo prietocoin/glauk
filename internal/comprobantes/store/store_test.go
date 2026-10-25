@@ -22,6 +22,18 @@ func newMock(t *testing.T) pgxmock.PgxPoolIface {
 	return mock
 }
 
+func TestListSQLRequiresLiquidatedAndPositiveAmount(t *testing.T) {
+	sql := strings.Join(strings.Fields(ListSQL), " ")
+	for _, want := range []string{
+		"l.hash_largo IS NOT NULL",
+		"c.monto > 0",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("ListSQL debe excluir huérfanos/sin liquidar: falta %q", want)
+		}
+	}
+}
+
 func TestListRowsMapsSocioToDollarTwo(t *testing.T) {
 	mock := newMock(t)
 	query := strings.ReplaceAll(ListSQL, "{{PAGE_ORDER}}", orderClause(false, 100, 0))

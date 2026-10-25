@@ -82,6 +82,8 @@ WITH candidatos AS (
     LEFT JOIN perfiles_glaukov n2
         ON upper(btrim(n2.nombre)) = upper(btrim(COALESCE(l.socio_2, n_grupo2.nombre, n_user2.nombre)))
     WHERE lower(btrim(c.instancia)) IN ('glauk', 'jairo')
+      AND l.hash_largo IS NOT NULL
+      AND c.monto > 0
       AND ($5::text = '' OR c.hash_largo ILIKE '%' || $5::text || '%' OR c.referencia ILIKE '%' || $5::text || '%')
       AND (NULLIF($3::text, '') IS NULL OR c.creado_en >= NULLIF($3::text, '')::date)
       AND (NULLIF($4::text, '') IS NULL OR c.creado_en <= (NULLIF($4::text, '')::date + INTERVAL '1 day' - INTERVAL '1 second'))
