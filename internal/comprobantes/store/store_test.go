@@ -26,10 +26,13 @@ func TestListSQLRequiresLiquidatedAndPositiveAmount(t *testing.T) {
 	sql := strings.Join(strings.Fields(ListSQL), " ")
 	for _, want := range []string{
 		"l.hash_largo IS NOT NULL",
+		"l.socio_2 IS NOT NULL",
+		"btrim(l.socio_2) <> ''",
+		"UPPER(btrim(l.socio_2)) <> 'GENERAL'",
 		"c.monto > 0",
 	} {
 		if !strings.Contains(sql, want) {
-			t.Fatalf("ListSQL debe excluir huérfanos/sin liquidar: falta %q", want)
+			t.Fatalf("ListSQL debe exigir binomio 2x: falta %q", want)
 		}
 	}
 }

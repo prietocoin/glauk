@@ -17,15 +17,25 @@ import (
 // ErrQueueFull se responde como 503 para que Evolution reintente el webhook.
 var ErrQueueFull = errors.New("ingesta: cola de trabajos saturada")
 
+const (
+	// orphanAfter es la ventana de gracia de P-09: un recibo que no consolidó
+	// su binomio 2x en 24 h se considera huérfano.
+	orphanAfter = 24 * time.Hour
+	// orphanEvery acota el costo del barrido sin dejarlo solo en el arranque.
+	orphanEvery = 6 * time.Hour
+)
+
 // Module agrupa el caso de uso y su pool de workers. cmd/server solo llama a
 // Start, Close y Recibir; no conoce canales ni clientes externos.
 type Module struct {
-	service    *Service
-	store      *Repository
-	queue      *Dispatcher
-	enabled    bool
-	log        *slog.Logger
-	staleAfter time.Duration
+	service     *Service
+	store       *Repository
+	queue       *Dispatcher
+	enabled     bool
+	log         *slog.Logger
+	staleAfter  time.Duration
+	orphanAfter time.Duration
+	orphanEvery time.Duration
 }
 
 // NewModule cablea R2, Gemini, el store y el liquidador. Se construye siempre
@@ -60,6 +70,7 @@ func NewModule(cfg *config.Config, pool *pgxpool.Pool, evo *evolution.Client,
 	return &Module{
 		service: service, store: repository, queue: queue,
 		enabled: cfg.Ingesta.Enabled, log: log, staleAfter: staleAfter,
+		orphanAfter: orphanAfter, orphanEvery: orphanEvery,
 	}
 }
 
@@ -88,8 +99,49 @@ func (m *Module) Start(ctx context.Context) {
 			m.log.Warn("ingesta: trabajos EN_COLA marcados como FALLO",
 				"cantidad", barridos)
 		}
+		m.sweepOrphans(ctx)
+		go m.sweepOrphansPeriodically(ctx)
 	}
 	m.queue.Start(ctx)
+}
+
+// sweepOrphans ejecuta una pasada de retención P-09. Un fallo no detiene el
+// arranque ni el dispatcher: el siguiente tick vuelve a intentarlo.
+func (m *Module) sweepOrphans(ctx context.Context) {
+	if m == nil || m.store == nil {
+		return
+	}
+	resultado, err := m.store.SweepOrphans(ctx, m.orphanAfter)
+	if err != nil {
+		m.log.Warn("ingesta: no se pudieron barrer comprobantes huérfanos",
+			"error", err)
+		return
+	}
+	if resultado.Impactos > 0 || resultado.Comprobantes > 0 {
+		m.log.Warn("ingesta: huérfanos sin binomio 2x retirados",
+			"impactos", resultado.Impactos,
+			"comprobantes", resultado.Comprobantes,
+			"antiguedad", m.orphanAfter)
+	}
+}
+
+// sweepOrphansPeriodically repite el barrido mientras viva el proceso. El
+// ticker se cancela con el contexto de apagado que recibe Start.
+func (m *Module) sweepOrphansPeriodically(ctx context.Context) {
+	every := m.orphanEvery
+	if every <= 0 {
+		every = orphanEvery
+	}
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.sweepOrphans(ctx)
+		}
+	}
 }
 
 // Close espera a que los workers terminen el trabajo en curso.
