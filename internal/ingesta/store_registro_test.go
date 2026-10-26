@@ -21,6 +21,20 @@ func TestInsertImpactoUsaClaveUnica(t *testing.T) {
 	}
 }
 
+func TestUpdateRegistroParExigeGrupoDistinto(t *testing.T) {
+	sql := strings.Join(strings.Fields(updateRegistroParSQL), " ")
+	if strings.Contains(sql, "OFFSET 1") {
+		t.Fatal("el binomio no debe aceptar el segundo impacto por posición")
+	}
+	if !strings.Contains(sql,
+		"lower(btrim(s.grupo_raw)) <> lower(btrim(COALESCE(r.grupo_raw, '')))") {
+		t.Fatal("el segundo impacto debe tener un grupo distinto")
+	}
+	if !strings.Contains(sql, "btrim(COALESCE(s.grupo_raw, '')) <> ''") {
+		t.Fatal("el segundo impacto debe tener grupo no vacío")
+	}
+}
+
 func TestRegistrarDedupeAtomicoYNormalizaHash(t *testing.T) {
 	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	if err != nil {

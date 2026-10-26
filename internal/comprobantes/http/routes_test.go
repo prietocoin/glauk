@@ -179,6 +179,9 @@ func TestListSocioParamReturns200WithFilteredList(t *testing.T) {
 	if total := resp.Header.Get("X-Total-Count"); total != "1" {
 		t.Fatalf("X-Total-Count = %q, quiero 1", total)
 	}
+	if cache := resp.Header.Get("Cache-Control"); cache != "no-store" {
+		t.Fatalf("Cache-Control = %q, quiero no-store", cache)
+	}
 
 	var items []domain.Comprobante
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {

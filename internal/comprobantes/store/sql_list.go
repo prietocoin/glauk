@@ -12,10 +12,11 @@ import (
 // lote de tasas.
 //
 // El WHERE exige un binomio 2x real: la fila debe estar liquidada, tener dos
-// socios distintos, ninguno NULL/vacío/GENERAL, y un monto de recibo mayor a
-// cero. Los registros crudos que nunca consolidaron su contraparte, los 1x
-// camuflados con el mismo socio repetido y los montos no positivos no se
-// listan.
+// socios distintos y registrados en perfiles_glaukov, ninguno
+// NULL/vacío/GENERAL, y ambos equivalentes con impacto contable de al menos
+// 0.01. Los registros crudos que nunca consolidaron su contraparte, los 1x
+// camuflados con el mismo socio repetido y las liquidaciones que truncan a
+// 0.00 no se listan.
 //
 // El total del universo filtrado se calcula con COUNT(*) OVER() dentro de
 // "filtrados", es decir, antes de los joins de presentación. Los marcadores
@@ -91,11 +92,15 @@ WITH candidatos AS (
       AND l.hash_largo IS NOT NULL
       AND l.socio_1 IS NOT NULL
       AND btrim(l.socio_1) <> ''
-      AND UPPER(btrim(l.socio_1)) <> 'GENERAL'
+      AND UPPER(btrim(l.socio_1)) NOT IN ('GENERAL','NO DEFINIDO','S/D','N/A','NULL','UNDEFINED','-')
       AND l.socio_2 IS NOT NULL
       AND btrim(l.socio_2) <> ''
-      AND UPPER(btrim(l.socio_2)) <> 'GENERAL'
+      AND UPPER(btrim(l.socio_2)) NOT IN ('GENERAL','NO DEFINIDO','S/D','N/A','NULL','UNDEFINED','-')
       AND lower(btrim(l.socio_1)) <> lower(btrim(l.socio_2))
+      AND ABS(l.me1) >= 0.01
+      AND ABS(l.me2) >= 0.01
+      AND n1.nombre IS NOT NULL
+      AND n2.nombre IS NOT NULL
       AND c.monto > 0
       AND ($5::text = '' OR c.hash_largo ILIKE '%' || $5::text || '%' OR c.referencia ILIKE '%' || $5::text || '%')
       AND (NULLIF($3::text, '') IS NULL OR c.creado_en >= NULLIF($3::text, '')::date)

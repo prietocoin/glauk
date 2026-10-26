@@ -105,6 +105,14 @@ func jpegBase64(t *testing.T) string {
 	return base64.StdEncoding.EncodeToString(buf.Bytes())
 }
 
+func TestFiltrosReportesSinCache(t *testing.T) {
+	app := newTestApp(t, fakeSender{}, reportes.Config{})
+	resp, _ := pedir(t, app, nethttp.MethodGet, "/api/v1/reportes/filtros", "")
+	if cache := resp.Header.Get("Cache-Control"); cache != "no-store" {
+		t.Fatalf("Cache-Control = %q, quiero no-store", cache)
+	}
+}
+
 func TestErroresDeContrato(t *testing.T) {
 	app := newTestApp(t, fakeSender{}, reportes.Config{})
 	valid := jpegBase64(t)

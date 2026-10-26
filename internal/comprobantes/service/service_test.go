@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"glauk/internal/comprobantes/calc"
@@ -20,6 +21,7 @@ type stubRepo struct {
 	liquidar  error
 	mark      bool
 	deleteErr error
+	profiles  map[string]bool
 }
 
 func (s *stubRepo) ListRows(context.Context, domain.ListFilters) ([]calc.SourceRow, int, error) {
@@ -27,6 +29,14 @@ func (s *stubRepo) ListRows(context.Context, domain.ListFilters) ([]calc.SourceR
 }
 func (s *stubRepo) Fundda(context.Context) (calc.Profile, error)       { return s.fundda, nil }
 func (s *stubRepo) Liquidar(context.Context, domain.Liquidacion) error { return s.liquidar }
+func (s *stubRepo) ProfilesExist(_ context.Context, names ...string) (bool, error) {
+	for _, name := range names {
+		if !s.profiles[domain.CanonicalSocio(name)] {
+			return false, nil
+		}
+	}
+	return true, nil
+}
 func (s *stubRepo) InTx(ctx context.Context, fn func(store.Tx) error) error {
 	if s.inTx == nil {
 		return nil
@@ -46,6 +56,7 @@ type stubTx struct {
 	deleted  bool
 	actual   domain.Liquidacion
 	profiles map[string]calc.Profile
+	upserts  int
 }
 
 func (t *stubTx) LockComprobante(context.Context, string) (store.RawComprobante, error) {
@@ -67,15 +78,19 @@ func (t *stubTx) RateLotByID(_ context.Context, id string) (calc.RateLot, error)
 	return calc.RateLot{IDTasa: id, Tasas: map[string]float64{"COP": 4000, "USDT": 1}}, nil
 }
 func (t *stubTx) ProfileByName(_ context.Context, name string) (calc.Profile, error) {
-	if profile, ok := t.profiles[name]; ok {
+	trimmed := strings.TrimSpace(name)
+	if domain.IsPlaceholderSocio(trimmed) {
+		return calc.Profile{}, domain.Validationf("el socio %q no es un socio real", name)
+	}
+	if profile, ok := t.profiles[trimmed]; ok {
 		return profile, nil
 	}
-	return calc.Profile{Nombre: name, MonedaBase: "USDT",
-		Monedas: map[string]calc.CurrencyConfig{"COP": {Polaridad: "+"}}}, nil
+	return calc.Profile{}, domain.Validationf("el socio %q no está registrado", name)
 }
 func (t *stubTx) Fundda(context.Context) (calc.Profile, error) { return calc.Profile{}, nil }
 func (t *stubTx) UpsertLiquidacion(_ context.Context, liq domain.Liquidacion) error {
 	t.liq = liq
+	t.upserts++
 	return nil
 }
 func (t *stubTx) DeleteComprobante(context.Context, string) error {
@@ -111,8 +126,105 @@ func TestLiquidarRequiresHash(t *testing.T) {
 	}
 }
 
+func TestLiquidarRechazaEquivalentesCero(t *testing.T) {
+	var input dto.LiquidarInput
+	if err := json.Unmarshal([]byte(`{
+		"hash_largo":"HASH","socio_1":"SOCIO_A","socio_2":"SOCIO_B",
+		"monto_1":1,"tasa_1":1,"me1":0,
+		"monto_2":-1,"tasa_2":1,"me2":0,"lote_tasa":"T052"}`), &input); err != nil {
+		t.Fatal(err)
+	}
+	_, err := New(&stubRepo{}).Liquidar(context.Background(), input)
+	var validation *domain.ValidationError
+	if !errors.As(err, &validation) {
+		t.Fatalf("error = %v, esperado ValidationError", err)
+	}
+}
+
+func TestLiquidarExigeSociosRegistrados(t *testing.T) {
+	var input dto.LiquidarInput
+	if err := json.Unmarshal([]byte(`{
+		"hash_largo":"HASH","socio_1":"SOCIO_A","socio_2":"SOCIO_B",
+		"monto_1":1,"tasa_1":1,"me1":1,
+		"monto_2":-1,"tasa_2":1,"me2":-1,"lote_tasa":"T052"}`), &input); err != nil {
+		t.Fatal(err)
+	}
+	_, err := New(&stubRepo{}).Liquidar(context.Background(), input)
+	var validation *domain.ValidationError
+	if !errors.As(err, &validation) {
+		t.Fatalf("error = %v, esperado ValidationError por perfiles", err)
+	}
+}
+
+func TestUpdateMetadataWithFullPayloadDoesNotTouchLiquidation(t *testing.T) {
+	socio2 := "SOCIO_B"
+	actual := domain.Liquidacion{
+		HashLargo: "HASH", Socio1: "SOCIO_A", TipoOp1: "D-COP",
+		Monto1: -100, Tasa1: 4000, ME1: -100,
+		Socio2: &socio2, TipoOp2: "D-COP", Monto2: 100, Tasa2: 4000, ME2: 100,
+		LoteTasa: "T052",
+	}
+	tx := &stubTx{actual: actual}
+	repo := &stubRepo{inTx: func(ctx context.Context, fn func(store.Tx) error) error {
+		return fn(tx)
+	}}
+	var input dto.UpdateInput
+	if err := json.Unmarshal([]byte(`{
+		"titular":"nuevo titular","banco":"banco","referencia":"REF-1",
+		"socio_1":"SOCIO_A","socio_2":"SOCIO_B",
+		"nombre_socio_1":"SOCIO_A","nombre_socio_2":"SOCIO_B",
+		"tipo_manual":"D","moneda":"COP","monto":100,
+		"lote_tasa_asignado":"T052","lote_tasa":"T052"}`), &input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(repo).Update(context.Background(), "HASH", input); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if tx.upserts != 0 {
+		t.Fatalf("el payload completo sin cambios financieros no debe upsertar: %d", tx.upserts)
+	}
+}
+
+func TestUpdateMetadataDoesNotTouchLiquidation(t *testing.T) {
+	socio2 := "SOCIO_B"
+	actual := domain.Liquidacion{
+		HashLargo: "HASH", Socio1: "SOCIO_A", TipoOp1: "D-COP",
+		Monto1: -100, Tasa1: 4000, ME1: -100,
+		Socio2: &socio2, TipoOp2: "D-COP", Monto2: 100, Tasa2: 4000, ME2: 100,
+		LoteTasa: "T052",
+	}
+	tx := &stubTx{actual: actual}
+	repo := &stubRepo{inTx: func(ctx context.Context, fn func(store.Tx) error) error {
+		return fn(tx)
+	}}
+	var input dto.UpdateInput
+	if err := json.Unmarshal([]byte(`{"titular":"nuevo titular","banco":"banco","referencia":"REF-1"}`),
+		&input); err != nil {
+		t.Fatal(err)
+	}
+	liq, err := New(repo).Update(context.Background(), "HASH", input)
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if tx.upserts != 0 {
+		t.Fatalf("la edición de metadatos no debe upsertar liquidación: %d", tx.upserts)
+	}
+	if tx.updated.Titular != "NUEVO TITULAR" || tx.updated.Banco != "BANCO" {
+		t.Fatalf("metadatos no actualizados: %+v", tx.updated)
+	}
+	if liq.ME1 != actual.ME1 || liq.ME2 != actual.ME2 ||
+		liq.Socio1 != actual.Socio1 || liq.LoteTasa != actual.LoteTasa {
+		t.Fatalf("snapshot alterado: %+v", liq)
+	}
+}
+
 func TestUpdateResolvesAliasesInsideTransaction(t *testing.T) {
-	tx := &stubTx{}
+	tx := &stubTx{profiles: map[string]calc.Profile{
+		"SOCIO_A": {Nombre: "SOCIO_A", MonedaBase: "USDT",
+			Monedas: map[string]calc.CurrencyConfig{"COP": {Tipo: "D", PolarD: "+"}}},
+		"SOCIO_B": {Nombre: "SOCIO_B", MonedaBase: "USDT",
+			Monedas: map[string]calc.CurrencyConfig{"COP": {Tipo: "D", PolarD: "+"}}},
+	}}
 	repo := &stubRepo{inTx: func(ctx context.Context, fn func(store.Tx) error) error {
 		return fn(tx)
 	}}
@@ -137,9 +249,11 @@ func TestUpdateResolvesAliasesInsideTransaction(t *testing.T) {
 }
 
 func TestUpdateRecalculaAlCambiarSocio(t *testing.T) {
+	socio2 := "SOCIO_A"
 	tx := &stubTx{
 		actual: domain.Liquidacion{
-			HashLargo: "HASH", Socio1: "SOCIO_A", TipoOp1: "D-COP", LoteTasa: "T052",
+			HashLargo: "HASH", Socio1: "SOCIO_A", TipoOp1: "D-COP",
+			Socio2: &socio2, TipoOp2: "D-COP", LoteTasa: "T052",
 		},
 		profiles: map[string]calc.Profile{
 			"SOCIO_A": {Nombre: "SOCIO_A", MonedaBase: "USDT",

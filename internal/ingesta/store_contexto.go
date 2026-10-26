@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	"glauk/internal/comprobantes/domain"
 )
 
 const imagenExistenteSQL = `
@@ -117,7 +119,8 @@ func (r *Repository) Contexto(ctx context.Context, hash string) (Contexto, error
 		if result.URLImagen == "" && url != "" {
 			result.URLImagen = url
 		}
-		if grupo != "" && !containsString(result.Grupos, grupo) && len(result.Grupos) < 2 {
+		if grupo != "" && !domain.IsPlaceholderSocio(grupo) &&
+			!containsString(result.Grupos, grupo) && len(result.Grupos) < 2 {
 			result.Grupos = append(result.Grupos, grupo)
 		}
 	}
@@ -132,8 +135,9 @@ func (r *Repository) Contexto(ctx context.Context, hash string) (Contexto, error
 }
 
 func containsString(values []string, target string) bool {
+	normalizado := domain.CanonicalSocio(target)
 	for _, value := range values {
-		if value == target {
+		if domain.CanonicalSocio(value) == normalizado {
 			return true
 		}
 	}

@@ -22,6 +22,7 @@ func NewHandler(module *reportes.Module) *Handler {
 
 // Filtros responde GET /api/v1/reportes/filtros con el envelope canónico.
 func (h *Handler) Filtros(c *fiber.Ctx) error {
+	c.Set("Cache-Control", "no-store")
 	if !h.valido() {
 		return fallo(c, fiber.StatusServiceUnavailable, "SERVICE_UNAVAILABLE",
 			"el servicio de reportes no está configurado")
@@ -35,6 +36,7 @@ func (h *Handler) Filtros(c *fiber.Ctx) error {
 
 // FiltrosLegacy conserva el envelope plano que consume api.js.
 func (h *Handler) FiltrosLegacy(c *fiber.Ctx) error {
+	c.Set("Cache-Control", "no-store")
 	if !h.valido() {
 		return falloLegacy(c, fiber.StatusServiceUnavailable,
 			"el servicio de reportes no está configurado")
@@ -48,6 +50,7 @@ func (h *Handler) FiltrosLegacy(c *fiber.Ctx) error {
 
 // EnviarImagen responde POST /api/v1/reportes/imagen.
 func (h *Handler) EnviarImagen(c *fiber.Ctx) error {
+	c.Set("Cache-Control", "no-store")
 	var req EnviarImagenRequest
 	if err := c.BodyParser(&req); err != nil {
 		return fallo(c, fiber.StatusBadRequest, "INVALID_JSON", "payload JSON inválido")
@@ -57,6 +60,7 @@ func (h *Handler) EnviarImagen(c *fiber.Ctx) error {
 
 // EnviarImagenLegacy responde los alias históricos de envío de imagen.
 func (h *Handler) EnviarImagenLegacy(c *fiber.Ctx) error {
+	c.Set("Cache-Control", "no-store")
 	var req EnviarImagenRequest
 	if err := c.BodyParser(&req); err != nil {
 		return falloLegacy(c, fiber.StatusBadRequest, "payload JSON inválido")
@@ -66,6 +70,7 @@ func (h *Handler) EnviarImagenLegacy(c *fiber.Ctx) error {
 
 // EnviarTexto responde POST /api/v1/reportes/texto.
 func (h *Handler) EnviarTexto(c *fiber.Ctx) error {
+	c.Set("Cache-Control", "no-store")
 	var req EnviarTextoRequest
 	if err := c.BodyParser(&req); err != nil {
 		return fallo(c, fiber.StatusBadRequest, "INVALID_JSON", "payload JSON inválido")

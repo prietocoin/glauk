@@ -18,6 +18,13 @@ ON CONFLICT (hash_largo) DO UPDATE SET
     monto_2 = EXCLUDED.monto_2, tasa_2 = EXCLUDED.tasa_2, me2 = EXCLUDED.me2,
     lote_tasa = EXCLUDED.lote_tasa, actualizado_en = NOW()`
 
+const perfilExisteSQL = `
+SELECT EXISTS (
+    SELECT 1
+    FROM perfiles_glaukov
+    WHERE UPPER(TRIM(nombre)) = UPPER(TRIM($1::text))
+)`
+
 // GuardarLiquidacion persiste únicamente el snapshot canónico en
 // comprobantes_liq. La copia legacy comprobantes_final ya no se escribe: no
 // tenía lectores en ninguno de los módulos y su error se descartaba, de modo
@@ -27,6 +34,12 @@ func (r *Repository) GuardarLiquidacion(ctx context.Context,
 	result LiquidacionResult) error {
 	snapshot := result.Snapshot
 	snapshot.HashLargo = normalizeHash(snapshot.HashLargo)
+	if err := snapshot.Validate(); err != nil {
+		return fmt.Errorf("ingesta: liquidación inválida: %w", err)
+	}
+	if err := r.validarPerfiles(ctx, snapshot.Socio1, *snapshot.Socio2); err != nil {
+		return err
+	}
 	socio2 := ""
 	if snapshot.Socio2 != nil {
 		socio2 = *snapshot.Socio2
@@ -38,6 +51,20 @@ func (r *Repository) GuardarLiquidacion(ctx context.Context,
 		snapshot.ME2, snapshot.LoteTasa); err != nil {
 		return r.sqlFail("upsert_comprobantes_liq",
 			fmt.Errorf("ingesta: guardar liquidación: %w", err))
+	}
+	return nil
+}
+
+func (r *Repository) validarPerfiles(ctx context.Context, socios ...string) error {
+	for _, socio := range socios {
+		var existe bool
+		if err := r.db.QueryRow(ctx, perfilExisteSQL, socio).Scan(&existe); err != nil {
+			return r.sqlFail("validar_perfil_liquidacion",
+				fmt.Errorf("ingesta: validar socio %q: %w", socio, err))
+		}
+		if !existe {
+			return fmt.Errorf("ingesta: el socio %q no está registrado en perfiles_glaukov", socio)
+		}
 	}
 	return nil
 }

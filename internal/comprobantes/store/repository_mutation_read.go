@@ -51,6 +51,12 @@ const profileByNameSQL = `
 SELECT to_jsonb(p) FROM perfiles_glaukov p
 WHERE UPPER(TRIM(p.nombre)) = UPPER(TRIM($1)) LIMIT 1`
 
+const profileExistsSQL = `
+SELECT EXISTS (
+    SELECT 1 FROM perfiles_glaukov p
+    WHERE UPPER(TRIM(p.nombre)) = UPPER(TRIM($1))
+)`
+
 const funddaTxSQL = `
 SELECT to_jsonb(p) FROM perfiles_glaukov p
 WHERE UPPER(TRIM(p.nombre)) = 'FUNDDA' LIMIT 1`
@@ -65,7 +71,8 @@ SELECT id_tasa, tasas FROM tasas_glaukov
 ORDER BY created_at DESC, id DESC LIMIT 1`
 
 const currentLiquidacionSQL = `
-SELECT socio_1, tipo_op1, socio_2, tipo_op2, lote_tasa
+SELECT socio_1, tipo_op1, monto_1, tasa_1, me1,
+       socio_2, tipo_op2, monto_2, tasa_2, me2, lote_tasa
 FROM comprobantes_liq
 WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1))`
 
@@ -73,12 +80,15 @@ type calcProfile = calc.Profile
 type calcRateLot = calc.RateLot
 
 // LiquidacionActual devuelve el snapshot vigente para que una edición pueda
-// conservar socio, tipo y lote cuando el payload solo cambia otros campos.
+// conservar socio, tipo, lote e importes cuando el payload solo cambia otros
+// campos.
 func (t *txStore) LiquidacionActual(ctx context.Context, hash string) (domain.Liquidacion, bool, error) {
 	var liq domain.Liquidacion
 	var socio1, tipo1, socio2, tipo2, lote *string
+	var monto1, tasa1, me1, monto2, tasa2, me2 *float64
 	err := t.tx.QueryRow(ctx, currentLiquidacionSQL, hash).Scan(
-		&socio1, &tipo1, &socio2, &tipo2, &lote,
+		&socio1, &tipo1, &monto1, &tasa1, &me1,
+		&socio2, &tipo2, &monto2, &tasa2, &me2, &lote,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return liq, false, nil
@@ -89,7 +99,13 @@ func (t *txStore) LiquidacionActual(ctx context.Context, hash string) (domain.Li
 	liq.HashLargo = strings.TrimSpace(hash)
 	liq.Socio1 = trimmedOrEmpty(socio1)
 	liq.TipoOp1 = trimmedOrEmpty(tipo1)
+	liq.Monto1 = floatOrZero(monto1)
+	liq.Tasa1 = floatOrZero(tasa1)
+	liq.ME1 = floatOrZero(me1)
 	liq.TipoOp2 = trimmedOrEmpty(tipo2)
+	liq.Monto2 = floatOrZero(monto2)
+	liq.Tasa2 = floatOrZero(tasa2)
+	liq.ME2 = floatOrZero(me2)
 	liq.LoteTasa = trimmedOrEmpty(lote)
 	if socio2 != nil {
 		value := strings.TrimSpace(*socio2)
@@ -103,6 +119,13 @@ func trimmedOrEmpty(value *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*value)
+}
+
+func floatOrZero(value *float64) float64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 // LockComprobante bloquea la fila base y devuelve sus valores actuales.
@@ -131,21 +154,40 @@ func (t *txStore) UpdateComprobante(ctx context.Context, hash string, data RawUp
 	return nil
 }
 
-// ProfileByName devuelve GENERAL sin consultar y tolera socios inexistentes.
+// ProfileByName devuelve el perfil real. GENERAL, los placeholders y los
+// nombres no registrados se rechazan: no son una contraparte contable.
 func (t *txStore) ProfileByName(ctx context.Context, name string) (calc.Profile, error) {
 	trimmed := strings.TrimSpace(name)
-	if trimmed == "" || strings.EqualFold(trimmed, "GENERAL") {
-		return calc.Profile{Nombre: "GENERAL", MonedaBase: "USDT"}, nil
+	if domain.IsPlaceholderSocio(trimmed) {
+		return calc.Profile{}, domain.Validationf("el socio %q no es un socio real", name)
 	}
 	var raw []byte
 	err := t.tx.QueryRow(ctx, profileByNameSQL, trimmed).Scan(&raw)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return calc.Profile{Nombre: trimmed, MonedaBase: "USDT"}, nil
+		return calc.Profile{}, domain.Validationf("el socio %q no está registrado en perfiles_glaukov", name)
 	}
 	if err != nil {
 		return calc.Profile{}, fmt.Errorf("consultar perfil %s: %w", trimmed, err)
 	}
 	return calc.DecodeProfile(raw), nil
+}
+
+// ProfilesExist valida que ambos nombres correspondan a perfiles reales antes
+// de aceptar una liquidación manual.
+func (r *Repository) ProfilesExist(ctx context.Context, names ...string) (bool, error) {
+	for _, name := range names {
+		if domain.IsPlaceholderSocio(name) {
+			return false, nil
+		}
+		var exists bool
+		if err := r.db.QueryRow(ctx, profileExistsSQL, name).Scan(&exists); err != nil {
+			return false, fmt.Errorf("consultar perfil %s: %w", name, err)
+		}
+		if !exists {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // Fundda lee la plantilla de herencia dentro de la transacción.

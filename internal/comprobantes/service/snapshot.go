@@ -82,5 +82,8 @@ func (s *Service) buildSnapshot(ctx context.Context, tx store.Tx, hash string,
 	// El snapshot ya resolvió la naturaleza, incluida la regla de abono
 	// explícito de IRIS en COP. Reimponer el tipo de entrada borraría esa
 	// decisión y volvería a etiquetar como A un pago sin caption.
+	if err := liq.Validate(); err != nil {
+		return domain.Liquidacion{}, err
+	}
 	return liq, nil
 }

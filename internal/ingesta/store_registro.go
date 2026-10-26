@@ -59,16 +59,21 @@ SET conteo = 2,
     estado = 'PROCESADO',
     hash_imagen = COALESCE(r.hash_imagen, r.hash_largo),
     timestamp_msg = COALESCE(r.timestamp_msg, s.timestamp_msg)
-FROM (
-    SELECT usuario_raw, grupo_raw, timestamp_msg
-    FROM impactos_raw
-    WHERE LOWER(TRIM(hash_largo)) = LOWER(TRIM($1::varchar))
-      AND eliminado_en IS NULL
-    ORDER BY id ASC
-    LIMIT 1 OFFSET 1
-) AS s
+FROM impactos_raw AS s
 WHERE r.hash_largo = $2::varchar
   AND COALESCE(r.conteo, 0) < 2
+  AND LOWER(TRIM(s.hash_largo)) = LOWER(TRIM($1::varchar))
+  AND s.eliminado_en IS NULL
+  AND btrim(COALESCE(s.grupo_raw, '')) <> ''
+  AND lower(btrim(s.grupo_raw)) <> lower(btrim(COALESCE(r.grupo_raw, '')))
+  AND s.id = (
+      SELECT MIN(i.id)
+      FROM impactos_raw AS i
+      WHERE LOWER(TRIM(i.hash_largo)) = LOWER(TRIM($1::varchar))
+        AND i.eliminado_en IS NULL
+        AND btrim(COALESCE(i.grupo_raw, '')) <> ''
+        AND lower(btrim(i.grupo_raw)) <> lower(btrim(COALESCE(r.grupo_raw, '')))
+  )
 RETURNING r.conteo, COALESCE(r.estado, 'PROCESADO')`
 
 const selectRegistroSQL = `

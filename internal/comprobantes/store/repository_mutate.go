@@ -50,6 +50,9 @@ func (t *txStore) UpsertLiquidacion(ctx context.Context, liq domain.Liquidacion)
 }
 
 func upsertLiquidacion(ctx context.Context, q sqlExecutor, liq domain.Liquidacion) error {
+	if err := liq.Validate(); err != nil {
+		return err
+	}
 	tag, err := q.Exec(ctx, upsertLiquidacionSQL,
 		liq.HashLargo, liq.Socio1, liq.TipoOp1, liq.Monto1, liq.Tasa1, liq.ME1,
 		liq.Socio2, liq.TipoOp2, liq.Monto2, liq.Tasa2, liq.ME2, liq.LoteTasa,

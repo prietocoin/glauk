@@ -28,11 +28,15 @@ func TestListSQLRequiresLiquidatedAndPositiveAmount(t *testing.T) {
 		"l.hash_largo IS NOT NULL",
 		"l.socio_1 IS NOT NULL",
 		"btrim(l.socio_1) <> ''",
-		"UPPER(btrim(l.socio_1)) <> 'GENERAL'",
+		"UPPER(btrim(l.socio_1)) NOT IN ('GENERAL','NO DEFINIDO','S/D','N/A','NULL','UNDEFINED','-')",
 		"l.socio_2 IS NOT NULL",
 		"btrim(l.socio_2) <> ''",
-		"UPPER(btrim(l.socio_2)) <> 'GENERAL'",
+		"UPPER(btrim(l.socio_2)) NOT IN ('GENERAL','NO DEFINIDO','S/D','N/A','NULL','UNDEFINED','-')",
 		"lower(btrim(l.socio_1)) <> lower(btrim(l.socio_2))",
+		"ABS(l.me1) >= 0.01",
+		"ABS(l.me2) >= 0.01",
+		"n1.nombre IS NOT NULL",
+		"n2.nombre IS NOT NULL",
 		"c.monto > 0",
 	} {
 		if !strings.Contains(sql, want) {
@@ -118,6 +122,23 @@ func TestDeleteRollsBackWhenMarkImpactosFails(t *testing.T) {
 	}
 }
 
+func TestUpsertLiquidacionRechazaEquivalentesCero(t *testing.T) {
+	mock := newMock(t)
+	socio2 := "SOCIO_B"
+	liq := domain.Liquidacion{
+		HashLargo: "HASH", Socio1: "SOCIO_A", TipoOp1: "D-COP",
+		Monto1: -100, Tasa1: 4000, ME1: 0,
+		Socio2: &socio2, TipoOp2: "D-COP", Monto2: 100, Tasa2: 4000, ME2: 0,
+		LoteTasa: "T052",
+	}
+	if err := New(mock).Liquidar(context.Background(), liq); err == nil {
+		t.Fatal("se esperaba rechazo de liquidación con equivalentes cero")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("no debió escribir en base: %v", err)
+	}
+}
+
 func TestUpsertLiquidacionPreservesFrozenValues(t *testing.T) {
 	mock := newMock(t)
 	socio2 := "SOCIO_B"
@@ -142,10 +163,16 @@ func TestUpsertLiquidacionPreservesFrozenValues(t *testing.T) {
 
 func TestUpsertLiquidacionReturnsNotFoundWhenRawMissing(t *testing.T) {
 	mock := newMock(t)
-	liq := domain.Liquidacion{HashLargo: "HUERFANO", Socio1: "SOCIO_A", LoteTasa: "T052"}
+	socio2 := "SOCIO_B"
+	liq := domain.Liquidacion{
+		HashLargo: "HUERFANO", Socio1: "SOCIO_A", TipoOp1: "D-COP",
+		Monto1: -100, Tasa1: 4000, ME1: -100,
+		Socio2: &socio2, TipoOp2: "D-COP", Monto2: 100, Tasa2: 4000, ME2: 100,
+		LoteTasa: "T052",
+	}
 	mock.ExpectExec(upsertLiquidacionSQL).WithArgs(
-		"HUERFANO", "SOCIO_A", "", 0.0, 0.0, 0.0,
-		(*string)(nil), "", 0.0, 0.0, 0.0, "T052",
+		"HUERFANO", "SOCIO_A", "D-COP", -100.0, 4000.0, -100.0,
+		&socio2, "D-COP", 100.0, 4000.0, 100.0, "T052",
 	).WillReturnResult(pgxmock.NewResult("INSERT", 0))
 
 	err := New(mock).Liquidar(context.Background(), liq)

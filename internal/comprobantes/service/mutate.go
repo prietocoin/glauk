@@ -13,11 +13,14 @@ import (
 // Liquidar registra o actualiza el snapshot congelado de una liquidación.
 func (s *Service) Liquidar(ctx context.Context, input dto.LiquidarInput) (domain.Liquidacion, error) {
 	liq := input.ToLiquidacion()
-	if liq.HashLargo == "" {
-		return domain.Liquidacion{}, domain.Validationf("hash_largo es obligatorio")
-	}
 	if err := validateLiquidacion(liq); err != nil {
 		return domain.Liquidacion{}, err
+	}
+	if ok, err := s.repo.ProfilesExist(ctx, liq.Socio1, *liq.Socio2); err != nil {
+		return domain.Liquidacion{}, err
+	} else if !ok {
+		return domain.Liquidacion{}, domain.Validationf(
+			"socio_1 y socio_2 deben existir en perfiles_glaukov")
 	}
 	if err := s.repo.Liquidar(ctx, liq); err != nil {
 		return domain.Liquidacion{}, err
@@ -25,7 +28,9 @@ func (s *Service) Liquidar(ctx context.Context, input dto.LiquidarInput) (domain
 	return liq, nil
 }
 
-// Update edita comprobantes_raw y sincroniza comprobantes_liq en una transacción.
+// Update edita comprobantes_raw y, solo cuando hay un cambio financiero real,
+// sincroniza comprobantes_liq en la misma transacción. Una edición de titular,
+// banco o referencia no recalcula ni degrada el snapshot.
 func (s *Service) Update(ctx context.Context, hash string, input dto.UpdateInput) (domain.Liquidacion, error) {
 	target := strings.TrimSpace(hash)
 	if target == "" {
@@ -44,6 +49,13 @@ func (s *Service) Update(ctx context.Context, hash string, input dto.UpdateInput
 		update := resolveRawUpdate(current, input)
 		if err := tx.UpdateComprobante(ctx, target, update); err != nil {
 			return err
+		}
+		if !tieneCambiosFinancieros(input, current, actual) {
+			liq = actual
+			if strings.TrimSpace(liq.HashLargo) == "" {
+				liq.HashLargo = target
+			}
+			return nil
 		}
 		liq, err = s.buildSnapshot(ctx, tx, target, update, input, actual, current.Caption)
 		if err != nil {
@@ -107,14 +119,60 @@ func resolveRawUpdate(current store.RawComprobante, input dto.UpdateInput) store
 	return out
 }
 
-func validateLiquidacion(liq domain.Liquidacion) error {
-	values := []float64{liq.Monto1, liq.Tasa1, liq.ME1, liq.Monto2, liq.Tasa2, liq.ME2}
-	for _, value := range values {
-		if math.IsNaN(value) || math.IsInf(value, 0) {
-			return domain.Validationf("la liquidación contiene valores no finitos")
-		}
+// tieneCambiosFinancieros compara el payload con el estado persistido. La UI
+// envía el formulario completo, así que la sola presencia de un campo no basta:
+// solo se recalcula cuando el valor financiero realmente cambió.
+func tieneCambiosFinancieros(input dto.UpdateInput, current store.RawComprobante,
+	actual domain.Liquidacion) bool {
+	if input.Monto.Set && input.Monto.Value > 0 &&
+		!casiIgual(input.Monto.Value, current.Monto) {
+		return true
 	}
-	return nil
+	if value := strings.TrimSpace(input.MonedaValor()); value != "" &&
+		!strings.EqualFold(value, derefString(current.Moneda)) {
+		return true
+	}
+	if value, ok := input.Socio1Opcional(); ok && !mismoSocio(value, actual.Socio1) {
+		return true
+	}
+	if value, ok := input.Socio2Opcional(); ok &&
+		!mismoSocio(value, derefString(actual.Socio2)) {
+		return true
+	}
+	if value, ok := input.TipoOpcional(); ok &&
+		letraTipo(value) != letraTipo(actual.TipoOp1) {
+		return true
+	}
+	if value, ok := input.LoteOpcional(); ok &&
+		!strings.EqualFold(value, actual.LoteTasa) {
+		return true
+	}
+	return false
+}
+
+func casiIgual(a, b float64) bool {
+	return math.Abs(a-b) < 1e-9
+}
+
+func mismoSocio(a, b string) bool {
+	primero := domain.CanonicalSocio(a)
+	segundo := domain.CanonicalSocio(b)
+	if domain.IsPlaceholderSocio(primero) && domain.IsPlaceholderSocio(segundo) {
+		return true
+	}
+	return primero == segundo
+}
+
+func letraTipo(value string) string {
+	clean := strings.ToUpper(strings.TrimSpace(value))
+	if clean == "" {
+		return ""
+	}
+	return clean[:1]
+}
+
+func validateLiquidacion(liq domain.Liquidacion) error {
+	return liq.Validate()
 }
 
 func derefString(value *string) string {

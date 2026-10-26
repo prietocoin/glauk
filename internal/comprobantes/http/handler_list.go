@@ -16,6 +16,7 @@ import (
 // de llamar al servicio. Los metadatos de paginación viajan en cabeceras para
 // conservar el contrato de array raíz que consumen los paneles históricos.
 func (d Deps) Listar(c *fiber.Ctx) error {
+	c.Set("Cache-Control", "no-store")
 	var filters dto.ListFilters
 	if err := c.QueryParser(&filters); err != nil {
 		return httpx.Fail(c, fiber.StatusBadRequest, "VALIDATION_ERROR",

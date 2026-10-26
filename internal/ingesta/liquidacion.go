@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"glauk/internal/comprobantes/calc"
+	"glauk/internal/comprobantes/domain"
 	tasasstore "glauk/internal/tasas/store"
 )
 
@@ -45,7 +46,10 @@ func (l *LiquidadorAdapter) Liquidar(ctx context.Context,
 	if l == nil || l.db == nil {
 		return LiquidacionResult{}, errors.New("ingesta: liquidador sin base de datos")
 	}
-	grupo1, grupo2 := groupsOf(in.Grupos)
+	grupo1, grupo2, err := groupsOf(in.Grupos)
+	if err != nil {
+		return LiquidacionResult{}, err
+	}
 	perfil1, err := l.perfil(ctx, grupo1)
 	if err != nil {
 		return LiquidacionResult{}, err
@@ -93,25 +97,23 @@ func (l *LiquidadorAdapter) Liquidar(ctx context.Context,
 }
 
 func (l *LiquidadorAdapter) perfil(ctx context.Context, grupo string) (calc.Profile, error) {
-	fallback := calc.Profile{Nombre: grupo, Rol: "SOCIO", MonedaBase: "USDT"}
-	if strings.TrimSpace(grupo) == "" ||
-		strings.EqualFold(grupo, "GENERAL") ||
-		strings.EqualFold(grupo, "NO DEFINIDO") {
-		return fallback, nil
+	clean := strings.TrimSpace(grupo)
+	if domain.IsPlaceholderSocio(clean) {
+		return calc.Profile{}, fmt.Errorf("ingesta: el grupo %q no es un socio real", grupo)
 	}
-	numeric := strings.SplitN(grupo, "@", 2)[0]
+	numeric := strings.SplitN(clean, "@", 2)[0]
 	pattern := "%" + numeric + "%"
 	var raw []byte
-	err := l.db.QueryRow(ctx, perfilPorGrupoSQL, grupo, pattern).Scan(&raw)
+	err := l.db.QueryRow(ctx, perfilPorGrupoSQL, clean, pattern).Scan(&raw)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fallback, nil
+		return calc.Profile{}, fmt.Errorf("ingesta: el grupo %q no está registrado en perfiles_glaukov", grupo)
 	}
 	if err != nil {
 		return calc.Profile{}, fmt.Errorf("ingesta: leer perfil %q: %w", grupo, err)
 	}
 	profile := calc.DecodeProfile(raw)
 	if strings.TrimSpace(profile.Nombre) == "" {
-		profile.Nombre = grupo
+		profile.Nombre = clean
 	}
 	if strings.TrimSpace(profile.MonedaBase) == "" {
 		profile.MonedaBase = "USDT"
@@ -143,28 +145,25 @@ func tipoOperacion(perfil1, fundda calc.Profile, moneda string) string {
 	return "P"
 }
 
-func groupsOf(grupos []string) (string, string) {
+func groupsOf(grupos []string) (string, string, error) {
 	first, second := "", ""
-	for _, grupo := range grupos {
-		clean := strings.TrimSpace(grupo)
-		if clean == "" || clean == first {
+	for _, raw := range grupos {
+		clean := strings.TrimSpace(raw)
+		if domain.IsPlaceholderSocio(clean) {
 			continue
 		}
 		if first == "" {
 			first = clean
 			continue
 		}
-		if second == "" {
+		if second == "" && domain.CanonicalSocio(clean) != domain.CanonicalSocio(first) {
 			second = clean
 		}
 	}
-	if first == "" {
-		first = "GENERAL"
+	if first == "" || second == "" {
+		return "", "", errors.New("ingesta: se requieren dos grupos distintos y válidos para liquidar")
 	}
-	if second == "" {
-		second = first
-	}
-	return first, second
+	return first, second, nil
 }
 
 func baseOf(profile calc.Profile) string {

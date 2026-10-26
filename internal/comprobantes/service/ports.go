@@ -19,6 +19,7 @@ type Repository interface {
 	LatestLot(ctx context.Context) (domain.LoteTasa, error)
 	History(ctx context.Context) ([]domain.LoteTasa, error)
 	Liquidar(ctx context.Context, liq domain.Liquidacion) error
+	ProfilesExist(ctx context.Context, names ...string) (bool, error)
 	InTx(ctx context.Context, fn func(store.Tx) error) error
 	MarkReprocessing(ctx context.Context, hash string) (bool, error)
 	Queue(ctx context.Context) ([]domain.QueueItem, error)
